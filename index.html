@@ -2,143 +2,30 @@
 <html>
 <head>
   <style>
-    body {
+    html, body {
       margin: 0;
       padding: 0;
-      overflow-x: hidden;
+      overflow: hidden;
     }
 
-    .comic-page {
+    #container {
       display: flex;
-      justify-content: center;
-      align-items: center;
-      height: 100vh;
+      overflow-x: scroll;
+      scroll-snap-type: x mandatory;
     }
 
-    .comic-page img {
-      max-height: 100%;
-      max-width: 100%;
+    #container > img {
+      width: 100vw;
+      height: 100vh;
+      scroll-snap-align: start;
     }
   </style>
 </head>
 <body>
-  <div class="comic-page">
-    <img src="images/agent-jones-fortnite-jones.gif" alt="Comic Page 1">
+  <div id="container">
+    <img src="images/alx.png" alt="Image 1">
+    <img src="images/alx.png" alt="Image 2">
+    <img src="images/alx.png" alt="Image 3">
   </div>
-  
-  <div class="comic-page">
-    <img src="images/alx.png" alt="Comic Page 2">
-  </div>
-  
-  <div class="comic-page">
-    <img src="images/gissssssphy.gif" alt="Comic Page 3">
-  </div>
-
-  <div class="comic-page">
-    <img src="images/gissssssphy.gif" alt="Comic Page 3">
-  </div>
-
-  <div class="comic-page">
-    <img src="images/gissssssphy.gif" alt="Comic Page 3">
-  </div>
-
-  <div class="comic-page">
-    <img src="images/gissssssphy.gif" alt="Comic Page 3">
-  </div>
-
-  <div class="comic-page">
-    <img src="images/gissssssphy.gif" alt="Comic Page 3">
-  </div>
-
-  <div class="comic-page">
-    <img src="images/gissssssphy.gif" alt="Comic Page 3">
-  </div>
-
-  <div class="comic-page">
-    <img src="images/gissssssphy.gif" alt="Comic Page 3">
-  </div>
-
-  <div class="comic-page">
-    <img src="images/gissssssphy.gif" alt="Comic Page 3">
-  </div>
-
-  <div class="comic-page">
-    <img src="images/gissssssphy.gif" alt="Comic Page 3">
-  </div>
-
-  <div class="comic-page">
-    <img src="images/gissssssphy.gif" alt="Comic Page 3">
-  </div>
-
-  <div class="comic-page">
-    <img src="images/gissssssphy.gif" alt="Comic Page 3">
-  </div>
-
-  <div class="comic-page">
-    <img src="images/gissssssphy.gif" alt="Comic Page 3">
-  </div>
-
-  <div class="comic-page">
-    <img src="images/gissssssphy.gif" alt="Comic Page 3">
-  </div>
-
-  <div class="comic-page">
-    <img src="images/gissssssphy.gif" alt="Comic Page 3">
-  </div>
-
-  <div class="comic-page">
-    <img src="images/gissssssphy.gif" alt="Comic Page 3">
-  </div>
-
-  <div class="comic-page">
-    <img src="images/gissssssphy.gif" alt="Comic Page 3">
-  </div>
-
-  <div class="comic-page">
-    <img src="images/gissssssphy.gif" alt="Comic Page 3">
-  </div>
-
-  <div class="comic-page">
-    <img src="images/gissssssphy.gif" alt="Comic Page 3">
-  </div>
-
-  <div class="comic-page">
-    <img src="images/gissssssphy.gif" alt="Comic Page 3">
-  </div>
-
-  <div class="comic-page">
-    <img src="images/gissssssphy.gif" alt="Comic Page 3">
-  </div>
-
-  <div class="comic-page">
-    <img src="images/gissssssphy.gif" alt="Comic Page 3">
-  </div>
-
-  <div class="comic-page">
-    <img src="images/gissssssphy.gif" alt="Comic Page 3">
-  </div>
-
-  <div class="comic-page">
-    <img src="images/gissssssphy.gif" alt="Comic Page 3">
-  </div>
-
-  <div class="comic-page">
-    <img src="images/gissssssphy.gif" alt="Comic Page 3">
-  </div>
-
-  <div class="comic-page">
-    <img src="images/gissssssphy.gif" alt="Comic Page 3">
-  </div>
-
-  <!-- Add more comic pages as needed -->
-
-  <script>
-    // Optional: Enable horizontal scrolling with mouse wheel
-    window.addEventListener("wheel", function(e) {
-      if (e.deltaY === 0) return;
-      e.preventDefault();
-      document.documentElement.scrollLeft += e.deltaY;
-    });
-  </script>
 </body>
 </html>
