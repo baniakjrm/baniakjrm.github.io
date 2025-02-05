@@ -29,7 +29,7 @@
 
       React.useEffect(() => {
         // Update the URL to point to your local Python backend.
-        fetch("http://192.145.117.109:5000/api/hello")
+        fetch("http://174.107.70.106:5000/api/hello")
           .then(response => response.json())
           .then(data => setMessage(data.message))
           .catch(error => setMessage("Error: " + error));
