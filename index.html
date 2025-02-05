@@ -1,9 +1,48 @@
 <!DOCTYPE html>
 <html>
 <head>
-  
+  <meta charset="utf-8">
+  <title>Hello World with React</title>
+  <style>
+    /* Simple CSS styling */
+    body {
+      font-family: Arial, sans-serif;
+      text-align: center;
+      margin-top: 50px;
+      background-color: #f2f2f2;
+    }
+    h1 {
+      color: #333;
+    }
+  </style>
+  <!-- Load React, ReactDOM, and Babel from CDNs -->
+  <script src="https://unpkg.com/react@17/umd/react.development.js" crossorigin></script>
+  <script src="https://unpkg.com/react-dom@17/umd/react-dom.development.js" crossorigin></script>
+  <!-- Babel allows us to write JSX directly in the browser -->
+  <script src="https://unpkg.com/babel-standalone@6/babel.min.js"></script>
 </head>
 <body>
-  Hello World
+  <div id="root"></div>
+  <script type="text/babel">
+    function App() {
+      const [message, setMessage] = React.useState("Loading...");
+
+      React.useEffect(() => {
+        // Update the URL to point to your local Python backend.
+        fetch("http://localhost:5000/api/hello")
+          .then(response => response.json())
+          .then(data => setMessage(data.message))
+          .catch(error => setMessage("Error: " + error));
+      }, []);
+
+      return (
+        <div>
+          <h1>{message}</h1>
+        </div>
+      );
+    }
+
+    ReactDOM.render(<App />, document.getElementById("root"));
+  </script>
 </body>
 </html>
