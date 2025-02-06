@@ -2,7 +2,7 @@
 <html>
 <head>
   <meta charset="utf-8">
-  <title>Hello World with React</title>
+  <title>Counter with React</title>
   <style>
     /* Simple CSS styling */
     body {
@@ -13,6 +13,11 @@
     }
     h1 {
       color: #333;
+    }
+    button {
+      padding: 10px 20px;
+      font-size: 16px;
+      cursor: pointer;
     }
   </style>
   <!-- Load React, ReactDOM, and Babel from CDNs -->
@@ -25,19 +30,64 @@
   <div id="root"></div>
   <script type="text/babel">
     function App() {
-      const [message, setMessage] = React.useState("Loading...");
+      const [counter, setCounter] = React.useState(0);
+      const [loading, setLoading] = React.useState(true);
+      const [error, setError] = React.useState(null);
+
+      // Fetch the initial counter value from the backend
+      const fetchCounter = () => {
+        fetch("https://baniakjr.com/api/counter")
+          .then(response => {
+            if (!response.ok) {
+              throw new Error("Network response was not ok");
+            }
+            return response.json();
+          })
+          .then(data => {
+            setCounter(data.count);
+            setLoading(false);
+          })
+          .catch(error => {
+            setError(error.toString());
+            setLoading(false);
+          });
+      };
 
       React.useEffect(() => {
-        // Update the URL to point to your local Python backend.
-        fetch("https://baniakjr.com/api/hello")
-          .then(response => response.json())
-          .then(data => setMessage(data.message))
-          .catch(error => setMessage("Error: " + error));
+        fetchCounter();
       }, []);
+
+      // Handle button press to increment the counter
+      const handleClick = () => {
+        fetch("https://baniakjr.com/api/increment", {
+          method: "POST"
+        })
+          .then(response => {
+            if (!response.ok) {
+              throw new Error("Network response was not ok");
+            }
+            return response.json();
+          })
+          .then(data => {
+            setCounter(data.count);
+          })
+          .catch(error => {
+            setError(error.toString());
+          });
+      };
+
+      if (loading) {
+        return <div>Loading...</div>;
+      }
+
+      if (error) {
+        return <div>Error: {error}</div>;
+      }
 
       return (
         <div>
-          <h1>{message}</h1>
+          <h1>Counter: {counter}</h1>
+          <button onClick={handleClick}>Press Me!</button>
         </div>
       );
     }
