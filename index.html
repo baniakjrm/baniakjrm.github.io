@@ -2,22 +2,73 @@
 <html>
 <head>
   <meta charset="utf-8">
-  <title>Counter with React</title>
+  <title>Chatroom with React & Flask</title>
   <style>
     /* Simple CSS styling */
     body {
       font-family: Arial, sans-serif;
-      text-align: center;
-      margin-top: 50px;
       background-color: #f2f2f2;
+      display: flex;
+      flex-direction: column;
+      align-items: center;
+      margin: 0;
+      padding: 20px;
     }
     h1 {
       color: #333;
     }
-    button {
+    .chat-container {
+      width: 100%;
+      max-width: 600px;
+      background-color: #fff;
+      border: 1px solid #ddd;
+      padding: 20px;
+      margin-bottom: 20px;
+      height: 400px;
+      overflow-y: auto;
+    }
+    .chat-message {
+      margin-bottom: 10px;
+      padding: 5px;
+      border-bottom: 1px solid #eee;
+    }
+    .chat-message:last-child {
+      border-bottom: none;
+    }
+    .chat-name {
+      font-weight: bold;
+    }
+    .chat-timestamp {
+      font-size: 0.8em;
+      color: #888;
+      margin-left: 5px;
+    }
+    .chat-form {
+      width: 100%;
+      max-width: 600px;
+      background-color: #fff;
+      border: 1px solid #ddd;
+      padding: 20px;
+    }
+    .chat-form input, .chat-form textarea {
+      width: 100%;
+      padding: 10px;
+      margin-bottom: 10px;
+      font-size: 16px;
+      border: 1px solid #ccc;
+      border-radius: 4px;
+    }
+    .chat-form button {
       padding: 10px 20px;
       font-size: 16px;
       cursor: pointer;
+      background-color: #28a745;
+      color: white;
+      border: none;
+      border-radius: 4px;
+    }
+    .error {
+      color: red;
     }
   </style>
   <!-- Load React, ReactDOM, and Babel from CDNs -->
@@ -27,16 +78,18 @@
   <script src="https://unpkg.com/babel-standalone@6/babel.min.js"></script>
 </head>
 <body>
+  <h1>Chatroom</h1>
   <div id="root"></div>
   <script type="text/babel">
-    function App() {
-      const [counter, setCounter] = React.useState(0);
-      const [loading, setLoading] = React.useState(true);
-      const [error, setError] = React.useState(null);
+    function ChatRoom() {
+      const [chats, setChats] = React.useState([]);
+      const [name, setName] = React.useState('');
+      const [message, setMessage] = React.useState('');
+      const [error, setError] = React.useState('');
 
-      // Fetch the initial counter value from the backend
-      const fetchCounter = () => {
-        fetch("https://baniakjr.com/api/counter")
+      // Fetch the last 20 chats from the backend
+      const fetchChats = () => {
+        fetch("https://baniakjr.com/api/chats")
           .then(response => {
             if (!response.ok) {
               throw new Error("Network response was not ok");
@@ -44,55 +97,95 @@
             return response.json();
           })
           .then(data => {
-            setCounter(data.count);
-            setLoading(false);
+            setChats(data);
           })
           .catch(error => {
-            setError(error.toString());
-            setLoading(false);
+            setError("Error fetching chats: " + error.toString());
           });
       };
 
+      // Fetch chats on mount and set up an interval to refresh every 3 seconds
       React.useEffect(() => {
-        fetchCounter();
+        fetchChats();
+        const interval = setInterval(fetchChats, 3000);
+        return () => clearInterval(interval);
       }, []);
 
-      // Handle button press to increment the counter
-      const handleClick = () => {
-        fetch("https://baniakjr.com/api/increment", {
-          method: "POST"
+      // Handle form submission
+      const handleSubmit = (e) => {
+        e.preventDefault();
+        setError('');
+        // Basic client-side validation
+        if (!name.trim() || !message.trim()) {
+          setError("Both name and message are required.");
+          return;
+        }
+        if (message.length > 250) {
+          setError("Message must be 250 characters or less.");
+          return;
+        }
+        const payload = { name: name.trim(), message: message.trim() };
+
+        fetch("https://baniakjr.com/api/chats", {
+          method: "POST",
+          headers: {
+            "Content-Type": "application/json"
+          },
+          body: JSON.stringify(payload)
         })
-          .then(response => {
-            if (!response.ok) {
-              throw new Error("Network response was not ok");
-            }
-            return response.json();
-          })
-          .then(data => {
-            setCounter(data.count);
-          })
-          .catch(error => {
-            setError(error.toString());
-          });
+        .then(response => {
+          if (!response.ok) {
+            return response.json().then(err => { throw new Error(err.error || "Error posting message"); });
+          }
+          return response.json();
+        })
+        .then(data => {
+          setMessage('');
+          fetchChats();  // Refresh chats after a successful post
+        })
+        .catch(err => {
+          setError(err.toString());
+        });
       };
-
-      if (loading) {
-        return <div>Loading...</div>;
-      }
-
-      if (error) {
-        return <div>Error: {error}</div>;
-      }
 
       return (
         <div>
-          <h1>Counter: {counter}</h1>
-          <button onClick={handleClick}>Press Me!</button>
+          <div className="chat-container">
+            {chats.length === 0 ? (
+              <div>No messages yet.</div>
+            ) : (
+              chats.map((chat, index) => (
+                <div key={index} className="chat-message">
+                  <span className="chat-name">{chat.name}</span>
+                  <span className="chat-timestamp">{new Date(chat.timestamp).toLocaleString()}</span>
+                  <div>{chat.message}</div>
+                </div>
+              ))
+            )}
+          </div>
+          <form className="chat-form" onSubmit={handleSubmit}>
+            {error && <div className="error">{error}</div>}
+            <input
+              type="text"
+              placeholder="Your Name"
+              value={name}
+              onChange={e => setName(e.target.value)}
+              required
+            />
+            <textarea
+              placeholder="Your Message (max 250 characters)"
+              value={message}
+              onChange={e => setMessage(e.target.value)}
+              maxLength="250"
+              required
+            />
+            <button type="submit">Send</button>
+          </form>
         </div>
       );
     }
 
-    ReactDOM.render(<App />, document.getElementById("root"));
+    ReactDOM.render(<ChatRoom />, document.getElementById("root"));
   </script>
 </body>
 </html>
