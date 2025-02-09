@@ -4,8 +4,8 @@
   <meta charset="utf-8">
   <title>ChatGPT Wrapper Demo</title>
 
-  <!-- Make the site mobile-friendly -->
-  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <!-- Disable user zooming on mobile, and ensure viewport scaling is fixed -->
+  <meta name="viewport" content="width=device-width, initial-scale=1, maximum-scale=1, user-scalable=no">
 
   <style>
     /* Make the page fill the browser window */
@@ -15,6 +15,8 @@
       height: 100%;
       font-family: Arial, sans-serif;
       background: #f0f0f0;
+      /* Prevent text resizing on iOS Safari */
+      -webkit-text-size-adjust: none;
     }
 
     /* White top bar at the top of the screen */
@@ -22,6 +24,7 @@
       width: 100%;
       height: 5vh; /* Desktop: 5% of viewport height */
       background-color: #fff;
+      border-bottom: 1px solid #ccc;
     }
 
     /* Container that occupies the full viewport minus the top bar */
@@ -29,6 +32,8 @@
       display: flex;
       flex-direction: column;
       min-height: 95vh; /* Complements the 5vh top bar on desktop */
+      /* On mobile we might override this, but it’s fine as a base */
+      box-sizing: border-box;
     }
 
     /* 
@@ -48,6 +53,7 @@
       flex-direction: column;
       padding: 0 20px; /* horizontal padding */
       box-sizing: border-box;
+      position: relative;
     }
 
     /* Chat window styling */
@@ -58,7 +64,7 @@
       background: #F0F0F0;
       box-sizing: border-box;
       border-radius: 4px;
-      margin-bottom: 10px;   /* small gap above input box */
+      margin-bottom: 10px;   /* small gap above input box (desktop) */
     }
 
     .message {
@@ -104,7 +110,7 @@
       flex-shrink: 0;
     }
 
-    /* Input area pinned to the bottom of the .wrapper */
+    /* Input area pinned to the bottom (desktop layout can remain at the bottom, but not fixed) */
     .input-container {
       display: flex;
       padding: 10px 0;
@@ -115,7 +121,7 @@
     .input-container input {
       flex: 1;
       padding: 10px;
-      font-size: 16px;
+      font-size: 16px; /* ensures iOS won't zoom in */
       border: 1px solid #ccc;
       border-radius: 4px;
     }
@@ -123,7 +129,7 @@
     .input-container button {
       margin-left: 10px;
       padding: 10px 20px;
-      font-size: 16px;
+      font-size: 16px; /* ensures iOS won't zoom in */
       border: none;
       background: #28a745;
       color: #fff;
@@ -135,15 +141,13 @@
        MEDIA QUERY for screens 600px or smaller
        ========================================= */
     @media (max-width: 600px) {
-      /* Shorten the top bar on small screens */
+      /* Make the top bar slightly taller on small screens if you want, or keep it. */
       .top-bar {
-        height: 10vh; /* 2vh shorter than desktop */
+        height: 8vh;
       }
 
-      /* Decrease overall min-height so the first message 
-         is more likely to be visible without scrolling */
       .app-container {
-        min-height: 90vh; /* total (3vh + 97vh) = 100vh for mobile */
+        min-height: 92vh; /* total (8vh + 92vh) = 100vh for mobile */
       }
 
       /* Make the wrapper use full width on small screens */
@@ -168,11 +172,33 @@
         font-size: 14px;
       }
 
-      /* Adjust input fields/buttons */
-      .input-container input,
-      .input-container button {
-        font-size: 14px;
+      /* The key part: keep the input container fixed to the bottom */
+      .input-container {
+        position: fixed;
+        bottom: 0;
+        left: 0;
+        right: 0;
+        padding: 8px 10px;
+        margin: 0 auto;
+        border-top: 1px solid #ccc;
+        background: #fff;
+        box-sizing: border-box;
+      }
+
+      /* Because the input container is fixed, give the chat container bottom padding
+         so messages don’t disappear behind the fixed input container */
+      .chat-container {
+        margin-bottom: 60px; /* ~ the height of the input container + spacing */
+      }
+
+      .input-container input {
+        font-size: 16px; /* Enough to prevent iOS zoom */
         padding: 8px;
+      }
+
+      .input-container button {
+        font-size: 16px; /* Enough to prevent iOS zoom */
+        padding: 8px 12px;
       }
     }
   </style>
