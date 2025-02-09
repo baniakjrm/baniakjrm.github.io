@@ -2,190 +2,205 @@
 <html>
 <head>
   <meta charset="utf-8">
-  <title>Chatroom with React & Flask</title>
+  <title>ChatGPT Wrapper Demo</title>
   <style>
-    /* Simple CSS styling */
-    body {
+    /* Reset and basic styling */
+    body, html {
+      margin: 0;
+      padding: 0;
+      height: 100%;
       font-family: Arial, sans-serif;
-      background-color: #f2f2f2;
+      background: #f0f0f0;
+    }
+    /* The overall container fills the viewport */
+    .app-container {
       display: flex;
       flex-direction: column;
-      align-items: center;
-      margin: 0;
-      padding: 20px;
+      height: 100%;
     }
-    h1 {
-      color: #333;
-    }
+    /* Chat window styling */
     .chat-container {
-      width: 100%;
-      max-width: 600px;
-      background-color: #fff;
-      border: 1px solid #ddd;
-      padding: 20px;
-      margin-bottom: 20px;
-      height: 400px;
-      overflow-y: auto;
-    }
-    .chat-message {
-      margin-bottom: 10px;
-      padding: 5px;
-      border-bottom: 1px solid #eee;
-    }
-    .chat-message:last-child {
-      border-bottom: none;
-    }
-    .chat-name {
-      font-weight: bold;
-    }
-    .chat-timestamp {
-      font-size: 0.8em;
-      color: #888;
-      margin-left: 5px;
-    }
-    .chat-form {
-      width: 100%;
-      max-width: 600px;
-      background-color: #fff;
-      border: 1px solid #ddd;
-      padding: 20px;
-    }
-    .chat-form input, .chat-form textarea {
-      width: 100%;
+      flex: 1;
       padding: 10px;
-      margin-bottom: 10px;
+      overflow-y: auto;
+      background: #e5ddd5;
+    }
+    .message {
+      display: flex;
+      margin: 10px;
+    }
+    .message.bot {
+      justify-content: flex-start;
+    }
+    .message.user {
+      justify-content: flex-end;
+    }
+    .message-content {
+      max-width: 60%;
+      padding: 10px;
+      border-radius: 10px;
+      position: relative;
+      word-wrap: break-word;
+    }
+    /* Bot messages (left side) */
+    .message.bot .message-content {
+      background: #fff;
+      border: 1px solid #ccc;
+      margin-left: 10px;
+    }
+    /* User messages (right side) */
+    .message.user .message-content {
+      background: #dcf8c6;
+      border: 1px solid #97c97e;
+      margin-right: 10px;
+    }
+    /* Avatar styling */
+    .avatar {
+      width: 40px;
+      height: 40px;
+      border-radius: 50%;
+      background: #ccc;
+      flex-shrink: 0;
+    }
+    /* Input area styling */
+    .input-container {
+      display: flex;
+      padding: 10px;
+      background: #fff;
+      border-top: 1px solid #ccc;
+    }
+    .input-container input {
+      flex: 1;
+      padding: 10px;
       font-size: 16px;
       border: 1px solid #ccc;
       border-radius: 4px;
     }
-    .chat-form button {
+    .input-container button {
+      margin-left: 10px;
       padding: 10px 20px;
       font-size: 16px;
-      cursor: pointer;
-      background-color: #28a745;
-      color: white;
       border: none;
+      background: #28a745;
+      color: #fff;
       border-radius: 4px;
-    }
-    .error {
-      color: red;
+      cursor: pointer;
     }
   </style>
   <!-- Load React, ReactDOM, and Babel from CDNs -->
   <script src="https://unpkg.com/react@17/umd/react.development.js" crossorigin></script>
   <script src="https://unpkg.com/react-dom@17/umd/react-dom.development.js" crossorigin></script>
-  <!-- Babel allows us to write JSX directly in the browser -->
+  <!-- Babel allows writing JSX directly in the browser -->
   <script src="https://unpkg.com/babel-standalone@6/babel.min.js"></script>
 </head>
 <body>
-  <h1>Chatroom</h1>
   <div id="root"></div>
   <script type="text/babel">
-    function ChatRoom() {
-      const [chats, setChats] = React.useState([]);
-      const [name, setName] = React.useState('');
-      const [message, setMessage] = React.useState('');
-      const [error, setError] = React.useState('');
+    function ChatApp() {
+      const [messages, setMessages] = React.useState([]);
+      const [input, setInput] = React.useState("");
+      const chatContainerRef = React.useRef(null);
 
-      // Fetch the last 20 chats from the backend
-      const fetchChats = () => {
-        fetch("https://baniakjr.com/api/chats")
-          .then(response => {
-            if (!response.ok) {
-              throw new Error("Network response was not ok");
-            }
-            return response.json();
-          })
+      // Update these with your preferred avatar URLs.
+      const botAvatar = "https://via.placeholder.com/40?text=Bot";
+      const userAvatar = "https://via.placeholder.com/40?text=You";
+
+      // Scroll to the bottom of the chat window when new messages arrive.
+      const scrollToBottom = () => {
+        if (chatContainerRef.current) {
+          chatContainerRef.current.scrollTop = chatContainerRef.current.scrollHeight;
+        }
+      };
+
+      // Fetch the initial welcome message from the backend.
+      React.useEffect(() => {
+        fetch("https://your-backend-domain.com/api/chat")  // <-- update with your backend URL
+          .then(response => response.json())
           .then(data => {
-            setChats(data);
+            setMessages(prev => [...prev, data]);
+            scrollToBottom();
           })
-          .catch(error => {
-            setError("Error fetching chats: " + error.toString());
+          .catch(err => console.error("Error fetching initial message:", err));
+      }, []);
+
+      // Send the user message to the backend and append both user and bot messages.
+      const sendMessage = () => {
+        const trimmed = input.trim();
+        if (!trimmed) return;
+        // Append the user's message.
+        const userMsg = {
+          sender: "user",
+          message: trimmed,
+          timestamp: new Date().toISOString()
+        };
+        setMessages(prev => [...prev, userMsg]);
+        setInput("");
+
+        // Send the message to the backend.
+        fetch("https://your-backend-domain.com/api/chat", {  // <-- update with your backend URL
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({ message: trimmed })
+        })
+          .then(response => response.json())
+          .then(data => {
+            setMessages(prev => [...prev, data]);
+            scrollToBottom();
+          })
+          .catch(err => {
+            console.error("Error sending message:", err);
+            const errorMsg = {
+              sender: "bot",
+              message: "There was an error processing your message.",
+              timestamp: new Date().toISOString()
+            };
+            setMessages(prev => [...prev, errorMsg]);
+            scrollToBottom();
           });
       };
 
-      // Fetch chats on mount and set up an interval to refresh every 3 seconds
-      React.useEffect(() => {
-        fetchChats();
-        const interval = setInterval(fetchChats, 3000);
-        return () => clearInterval(interval);
-      }, []);
-
-      // Handle form submission
-      const handleSubmit = (e) => {
-        e.preventDefault();
-        setError('');
-        // Basic client-side validation
-        if (!name.trim() || !message.trim()) {
-          setError("Both name and message are required.");
-          return;
+      // Allow sending the message by pressing Enter.
+      const handleKeyPress = (e) => {
+        if (e.key === "Enter") {
+          sendMessage();
         }
-        if (message.length > 250) {
-          setError("Message must be 250 characters or less.");
-          return;
-        }
-        const payload = { name: name.trim(), message: message.trim() };
-
-        fetch("https://baniakjr.com/api/chats", {
-          method: "POST",
-          headers: {
-            "Content-Type": "application/json"
-          },
-          body: JSON.stringify(payload)
-        })
-        .then(response => {
-          if (!response.ok) {
-            return response.json().then(err => { throw new Error(err.error || "Error posting message"); });
-          }
-          return response.json();
-        })
-        .then(data => {
-          setMessage('');
-          fetchChats();  // Refresh chats after a successful post
-        })
-        .catch(err => {
-          setError(err.toString());
-        });
       };
 
       return (
-        <div>
-          <div className="chat-container">
-            {chats.length === 0 ? (
-              <div>No messages yet.</div>
-            ) : (
-              chats.map((chat, index) => (
-                <div key={index} className="chat-message">
-                  <span className="chat-name">{chat.name}</span>
-                  <span className="chat-timestamp">{new Date(chat.timestamp).toLocaleString()}</span>
-                  <div>{chat.message}</div>
+        <div className="app-container">
+          <div className="chat-container" ref={chatContainerRef}>
+            {messages.map((msg, index) => (
+              <div key={index} className={`message ${msg.sender}`}>
+                {msg.sender === "bot" && (
+                  <img src={botAvatar} alt="Bot Avatar" className="avatar" />
+                )}
+                <div className="message-content">
+                  {msg.message}
+                  <div style={{ fontSize: "0.7em", textAlign: "right", marginTop: "5px", color: "#666" }}>
+                    {new Date(msg.timestamp).toLocaleTimeString()}
+                  </div>
                 </div>
-              ))
-            )}
+                {msg.sender === "user" && (
+                  <img src={userAvatar} alt="User Avatar" className="avatar" />
+                )}
+              </div>
+            ))}
           </div>
-          <form className="chat-form" onSubmit={handleSubmit}>
-            {error && <div className="error">{error}</div>}
+          <div className="input-container">
             <input
               type="text"
-              placeholder="Your Name"
-              value={name}
-              onChange={e => setName(e.target.value)}
-              required
+              placeholder="Type your message..."
+              value={input}
+              onChange={(e) => setInput(e.target.value)}
+              onKeyPress={handleKeyPress}
             />
-            <textarea
-              placeholder="Your Message (max 250 characters)"
-              value={message}
-              onChange={e => setMessage(e.target.value)}
-              maxLength="250"
-              required
-            />
-            <button type="submit">Send</button>
-          </form>
+            <button onClick={sendMessage}>Send</button>
+          </div>
         </div>
       );
     }
 
-    ReactDOM.render(<ChatRoom />, document.getElementById("root"));
+    ReactDOM.render(<ChatApp />, document.getElementById("root"));
   </script>
 </body>
 </html>
