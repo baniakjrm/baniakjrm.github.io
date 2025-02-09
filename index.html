@@ -4,27 +4,35 @@
   <meta charset="utf-8">
   <title>ChatGPT Wrapper Demo</title>
   <style>
-    /* Reset and basic styling */
-    body, html {
+    /* Make the page fill the browser window */
+    html, body {
       margin: 0;
       padding: 0;
       height: 100%;
       font-family: Arial, sans-serif;
       background: #f0f0f0;
     }
-    /* The overall container fills the viewport */
+    
+    /* Container that occupies the full viewport */
     .app-container {
       display: flex;
       flex-direction: column;
-      height: 100%;
+      /* Ensure the container is at least the full viewport height */
+      min-height: 100vh;
+      /* Push everything to the bottom (the input stays at the bottom) */
+      justify-content: flex-end;
     }
-    /* Chat window styling */
+
+    /* Chat window styling (now we can limit or expand max-height as needed) */
     .chat-container {
-      flex: 1;
       padding: 10px;
       overflow-y: auto;
       background: #e5ddd5;
+      /* Give the chat area a max height so it can scroll if it grows too tall */
+      max-height: 70vh;
+      box-sizing: border-box;
     }
+
     .message {
       display: flex;
       margin: 10px;
@@ -35,11 +43,11 @@
     .message.user {
       justify-content: flex-end;
     }
+
     .message-content {
       max-width: 60%;
       padding: 10px;
       border-radius: 10px;
-      position: relative;
       word-wrap: break-word;
     }
     /* Bot messages (left side) */
@@ -54,6 +62,7 @@
       border: 1px solid #97c97e;
       margin-right: 10px;
     }
+
     /* Avatar styling */
     .avatar {
       width: 40px;
@@ -62,7 +71,8 @@
       background: #ccc;
       flex-shrink: 0;
     }
-    /* Input area styling */
+
+    /* Input area pinned to the bottom */
     .input-container {
       display: flex;
       padding: 10px;
@@ -127,6 +137,7 @@
       const sendMessage = () => {
         const trimmed = input.trim();
         if (!trimmed) return;
+
         // Append the user's message.
         const userMsg = {
           sender: "user",
