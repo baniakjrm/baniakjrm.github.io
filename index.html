@@ -20,10 +20,18 @@
       min-height: 100vh; /* ensure the container fills the viewport */
     }
 
-    /* Center the main content and constrain its width */
+    /* 
+      .wrapper: 
+      - Takes up ~33% of the screen width 
+      - Stays centered with margin: 0 auto 
+      - Has a minimum width to avoid being too narrow on small screens 
+      - Has a maximum width to avoid being too wide on extremely large monitors 
+    */
     .wrapper {
       flex: 1;
-      max-width: 2000px;
+      width: 33vw;
+      min-width: 480px;  /* Adjust if you want a different minimum */
+      max-width: 1080px; /* Adjust if you want a different maximum */
       margin: 0 auto;
       display: flex;
       flex-direction: column;
