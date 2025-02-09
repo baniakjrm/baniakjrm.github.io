@@ -17,22 +17,30 @@
     .app-container {
       display: flex;
       flex-direction: column;
-      /* Ensure the container is at least the full viewport height */
-      min-height: 100vh;
-      /* Push everything to the bottom (the input stays at the bottom) */
-      justify-content: flex-end;
+      min-height: 100vh; /* ensure the container fills the viewport */
     }
 
-    /* Chat window styling (now we can limit or expand max-height as needed) */
-    .chat-container {
-      padding: 10px;
-      overflow-y: auto;
-      background: #e5ddd5;
-      /* Give the chat area a max height so it can scroll if it grows too tall */
-      max-height: 70vh;
+    /* Center the main content and constrain its width */
+    .wrapper {
+      flex: 1;
+      max-width: 800px;
+      margin: 0 auto;
+      display: flex;
+      flex-direction: column;
+      padding: 0 20px; /* horizontal padding */
       box-sizing: border-box;
     }
 
+    /* Chat window styling */
+    .chat-container {
+      flex: 1;               /* expand to fill vertical space */
+      padding: 10px;
+      overflow-y: auto;
+      background: #e5ddd5;
+      box-sizing: border-box;
+      border-radius: 4px;
+      margin-bottom: 10px;   /* small gap above input box */
+    }
     .message {
       display: flex;
       margin: 10px;
@@ -43,7 +51,6 @@
     .message.user {
       justify-content: flex-end;
     }
-
     .message-content {
       max-width: 60%;
       padding: 10px;
@@ -62,7 +69,6 @@
       border: 1px solid #97c97e;
       margin-right: 10px;
     }
-
     /* Avatar styling */
     .avatar {
       width: 40px;
@@ -71,11 +77,10 @@
       background: #ccc;
       flex-shrink: 0;
     }
-
-    /* Input area pinned to the bottom */
+    /* Input area pinned to the bottom of the .wrapper */
     .input-container {
       display: flex;
-      padding: 10px;
+      padding: 10px 0;
       background: #fff;
       border-top: 1px solid #ccc;
     }
@@ -179,33 +184,35 @@
 
       return (
         <div className="app-container">
-          <div className="chat-container" ref={chatContainerRef}>
-            {messages.map((msg, index) => (
-              <div key={index} className={`message ${msg.sender}`}>
-                {msg.sender === "bot" && (
-                  <img src={botAvatar} alt="Bot Avatar" className="avatar" />
-                )}
-                <div className="message-content">
-                  {msg.message}
-                  <div style={{ fontSize: "0.7em", textAlign: "right", marginTop: "5px", color: "#666" }}>
-                    {new Date(msg.timestamp).toLocaleTimeString()}
+          <div className="wrapper">
+            <div className="chat-container" ref={chatContainerRef}>
+              {messages.map((msg, index) => (
+                <div key={index} className={`message ${msg.sender}`}>
+                  {msg.sender === "bot" && (
+                    <img src={botAvatar} alt="Bot Avatar" className="avatar" />
+                  )}
+                  <div className="message-content">
+                    {msg.message}
+                    <div style={{ fontSize: "0.7em", textAlign: "right", marginTop: "5px", color: "#666" }}>
+                      {new Date(msg.timestamp).toLocaleTimeString()}
+                    </div>
                   </div>
+                  {msg.sender === "user" && (
+                    <img src={userAvatar} alt="User Avatar" className="avatar" />
+                  )}
                 </div>
-                {msg.sender === "user" && (
-                  <img src={userAvatar} alt="User Avatar" className="avatar" />
-                )}
-              </div>
-            ))}
-          </div>
-          <div className="input-container">
-            <input
-              type="text"
-              placeholder="Type your message..."
-              value={input}
-              onChange={(e) => setInput(e.target.value)}
-              onKeyPress={handleKeyPress}
-            />
-            <button onClick={sendMessage}>Send</button>
+              ))}
+            </div>
+            <div className="input-container">
+              <input
+                type="text"
+                placeholder="Type your message..."
+                value={input}
+                onChange={(e) => setInput(e.target.value)}
+                onKeyPress={handleKeyPress}
+              />
+              <button onClick={sendMessage}>Send</button>
+            </div>
           </div>
         </div>
       );
