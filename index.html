@@ -3,6 +3,10 @@
 <head>
   <meta charset="utf-8">
   <title>ChatGPT Wrapper Demo</title>
+
+  <!-- Make the site mobile-friendly -->
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+
   <style>
     /* Make the page fill the browser window */
     html, body {
@@ -126,7 +130,42 @@
       border-radius: 4px;
       cursor: pointer;
     }
+
+    /* =========================================
+       MEDIA QUERY for screens 600px or smaller
+       ========================================= */
+    @media (max-width: 600px) {
+      /* Make the wrapper use full width on small screens */
+      .wrapper {
+        width: 100vw;
+        min-width: auto;
+        max-width: auto;
+        margin: 0;
+        padding: 0 10px;
+      }
+
+      /* Smaller avatars */
+      .avatar {
+        width: 30px;
+        height: 30px;
+      }
+
+      /* Adjust message container styles */
+      .message-content {
+        max-width: 80%;
+        padding: 8px;
+        font-size: 14px;
+      }
+
+      /* Adjust input fields/buttons */
+      .input-container input,
+      .input-container button {
+        font-size: 14px;
+        padding: 8px;
+      }
+    }
   </style>
+
   <!-- Load React, ReactDOM, and Babel from CDNs -->
   <script src="https://unpkg.com/react@17/umd/react.development.js" crossorigin></script>
   <script src="https://unpkg.com/react-dom@17/umd/react-dom.development.js" crossorigin></script>
@@ -173,7 +212,7 @@
         const trimmed = input.trim();
         if (!trimmed) return;
 
-        // Append the user's message.
+        // Append the user's message first.
         const userMsg = {
           sender: "user",
           message: trimmed,
