@@ -20,7 +20,7 @@
     /* White top bar at the top of the screen */
     .top-bar {
       width: 100%;
-      height: 5vh; /* Adjust this to control the percentage of screen height */
+      height: 5vh; /* Desktop: 5% of viewport height */
       background-color: #fff;
     }
 
@@ -28,12 +28,12 @@
     .app-container {
       display: flex;
       flex-direction: column;
-      min-height: 95vh; /* This complements the 5vh top bar */
+      min-height: 95vh; /* Complements the 5vh top bar on desktop */
     }
 
     /* 
       .wrapper:
-      - 50% of the viewport width
+      - 50% of the viewport width (desktop)
       - Centered with margin: 0 auto
       - Minimum width to avoid being too narrow on small screens
       - Maximum width to avoid being too wide on large screens 
@@ -41,8 +41,8 @@
     .wrapper {
       flex: 1;
       width: 50vw;
-      min-width: 480px;  /* Adjust if you want a different minimum */
-      max-width: 1080px; /* Adjust if you want a different maximum */
+      min-width: 480px;
+      max-width: 1080px;
       margin: 0 auto;
       display: flex;
       flex-direction: column;
@@ -135,6 +135,17 @@
        MEDIA QUERY for screens 600px or smaller
        ========================================= */
     @media (max-width: 600px) {
+      /* Shorten the top bar on small screens */
+      .top-bar {
+        height: 3vh; /* 2vh shorter than desktop */
+      }
+
+      /* Decrease overall min-height so the first message 
+         is more likely to be visible without scrolling */
+      .app-container {
+        min-height: 97vh; /* total (3vh + 97vh) = 100vh for mobile */
+      }
+
       /* Make the wrapper use full width on small screens */
       .wrapper {
         width: 100vw;
