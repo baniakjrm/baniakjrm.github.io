@@ -8,29 +8,41 @@
   <meta name="viewport" content="width=device-width, initial-scale=1, maximum-scale=1, user-scalable=no">
 
   <style>
+    /* Make the page fill the browser window */
     html, body {
       margin: 0;
       padding: 0;
       height: 100%;
       font-family: Arial, sans-serif;
       background: #f0f0f0;
+      /* Prevent text resizing on iOS Safari */
       -webkit-text-size-adjust: none;
     }
 
+    /* White top bar at the top of the screen */
     .top-bar {
       width: 100%;
-      height: 5vh;
+      height: 5vh; /* Desktop: 5% of viewport height */
       background-color: #fff;
       border-bottom: 1px solid #ccc;
     }
 
+    /* Container that occupies the full viewport minus the top bar */
     .app-container {
       display: flex;
       flex-direction: column;
-      min-height: 95vh;
+      min-height: 95vh; /* Complements the 5vh top bar on desktop */
+      /* On mobile we might override this, but it’s fine as a base */
       box-sizing: border-box;
     }
 
+    /* 
+      .wrapper:
+      - 50% of the viewport width (desktop)
+      - Centered with margin: 0 auto
+      - Minimum width to avoid being too narrow on small screens
+      - Maximum width to avoid being too wide on large screens 
+    */
     .wrapper {
       flex: 1;
       width: 50vw;
@@ -39,19 +51,20 @@
       margin: 0 auto;
       display: flex;
       flex-direction: column;
-      padding: 0 20px;
+      padding: 0 20px; /* horizontal padding */
       box-sizing: border-box;
       position: relative;
     }
 
+    /* Chat window styling */
     .chat-container {
-      flex: 1;
+      flex: 1;               /* expand to fill vertical space */
       padding: 10px;
       overflow-y: auto;
       background: #F0F0F0;
       box-sizing: border-box;
       border-radius: 4px;
-      margin-bottom: 10px;
+      margin-bottom: 10px;   /* small gap above input box (desktop) */
     }
 
     .message {
@@ -72,21 +85,23 @@
       padding: 10px;
       border-radius: 10px;
       word-wrap: break-word;
-      white-space: pre-wrap; /* Keep line breaks */
     }
 
+    /* Bot messages (left side) */
     .message.bot .message-content {
       background: #fff;
       border: 1px solid #ccc;
       margin-left: 10px;
     }
 
+    /* User messages (right side) */
     .message.user .message-content {
       background: #dcf8c6;
       border: 1px solid #97c97e;
       margin-right: 10px;
     }
 
+    /* Avatar styling */
     .avatar {
       width: 40px;
       height: 40px;
@@ -95,6 +110,7 @@
       flex-shrink: 0;
     }
 
+    /* Input area pinned to the bottom (desktop layout can remain at the bottom, but not fixed) */
     .input-container {
       display: flex;
       padding: 10px 0;
@@ -105,7 +121,7 @@
     .input-container input {
       flex: 1;
       padding: 10px;
-      font-size: 16px;
+      font-size: 16px; /* ensures iOS won't zoom in */
       border: 1px solid #ccc;
       border-radius: 4px;
     }
@@ -113,7 +129,7 @@
     .input-container button {
       margin-left: 10px;
       padding: 10px 20px;
-      font-size: 16px;
+      font-size: 16px; /* ensures iOS won't zoom in */
       border: none;
       background: #28a745;
       color: #fff;
@@ -121,13 +137,20 @@
       cursor: pointer;
     }
 
+    /* =========================================
+       MEDIA QUERY for screens 600px or smaller
+       ========================================= */
     @media (max-width: 600px) {
+      /* Make the top bar slightly taller on small screens if you want, or keep it. */
       .top-bar {
         height: 8vh;
       }
+
       .app-container {
-        min-height: 92vh;
+        min-height: 92vh; /* total (8vh + 92vh) = 100vh for mobile */
       }
+
+      /* Make the wrapper use full width on small screens */
       .wrapper {
         width: 100vw;
         min-width: auto;
@@ -135,15 +158,21 @@
         margin: 0;
         padding: 0 10px;
       }
+
+      /* Smaller avatars */
       .avatar {
         width: 30px;
         height: 30px;
       }
+
+      /* Adjust message container styles */
       .message-content {
         max-width: 80%;
         padding: 8px;
         font-size: 14px;
       }
+
+      /* The key part: keep the input container fixed to the bottom */
       .input-container {
         position: fixed;
         bottom: 0;
@@ -155,15 +184,20 @@
         background: #fff;
         box-sizing: border-box;
       }
+
+      /* Because the input container is fixed, give the chat container bottom padding
+         so messages don’t disappear behind the fixed input container */
       .chat-container {
-        margin-bottom: 60px;
+        margin-bottom: 60px; /* ~ the height of the input container + spacing */
       }
+
       .input-container input {
-        font-size: 16px;
+        font-size: 16px; /* Enough to prevent iOS zoom */
         padding: 8px;
       }
+
       .input-container button {
-        font-size: 16px;
+        font-size: 16px; /* Enough to prevent iOS zoom */
         padding: 8px 12px;
       }
     }
@@ -171,53 +205,35 @@
 
   <!-- Load React, ReactDOM, and Babel from CDNs -->
   <script src="https://unpkg.com/react@17/umd/react.development.js" crossorigin></script>
-  <script src="https://unpkg.com/react-dom@17/umd/react.development.js" crossorigin></script>
+  <script src="https://unpkg.com/react-dom@17/umd/react-dom.development.js" crossorigin></script>
+  <!-- Babel allows writing JSX directly in the browser -->
   <script src="https://unpkg.com/babel-standalone@6/babel.min.js"></script>
 </head>
 <body>
+  <!-- White top bar -->
   <div class="top-bar"></div>
 
+  <!-- Root for our React app -->
   <div id="root"></div>
 
   <script type="text/babel">
-    // A small helper to safely convert simple "markdown-like" text into HTML:
-    function formatMessage(text) {
-      // 1. Convert markdown links [text](url) => <a href="url" target="_blank">text</a>
-      let formatted = text.replace(/\[([^\]]+)\]\(([^)]+)\)/g, '<a href="$2" target="_blank">$1</a>');
-
-      // 2. Convert **bold** => <strong>bold</strong>
-      formatted = formatted.replace(/\*\*(.*?)\*\*/g, '<strong>$1</strong>');
-
-      // 3. Lines that begin with "- " => bullet points (with a line break)
-      //    We'll split by line, replace, then rejoin with <br/>
-      const lines = formatted.split('\n').map(line => {
-        // Trim left to catch lines with possible extra spaces: " - bullet"
-        if (/^\s*-\s+/.test(line)) {
-          // Remove leading dash/spaces, add bullet
-          return '• ' + line.replace(/^\s*-\s+/, '');
-        }
-        return line;
-      });
-
-      // 4. Join lines with <br/> so we preserve newlines
-      return lines.join('<br/>');
-    }
-
     function ChatApp() {
       const [messages, setMessages] = React.useState([]);
       const [input, setInput] = React.useState("");
       const chatContainerRef = React.useRef(null);
 
+      // Update these with your preferred avatar URLs.
       const botAvatar = "https://baniakjrm.github.io/images/PromptlyKids.png_0d98_resized.png";
       const userAvatar = "https://baniakjrm.github.io/images/34AD2.jpg";
 
+      // Scroll to the bottom of the chat window when new messages arrive.
       const scrollToBottom = () => {
         if (chatContainerRef.current) {
           chatContainerRef.current.scrollTop = chatContainerRef.current.scrollHeight;
         }
       };
 
-      // Fetch initial welcome message
+      // Fetch the initial welcome message from the backend.
       React.useEffect(() => {
         fetch("https://baniakjr.com/api/chat")
           .then(response => response.json())
@@ -228,11 +244,12 @@
           .catch(err => console.error("Error fetching initial message:", err));
       }, []);
 
-      // Send user message and get bot response
+      // Send the user message to the backend and append both user and bot messages.
       const sendMessage = () => {
         const trimmed = input.trim();
         if (!trimmed) return;
 
+        // Append the user's message first.
         const userMsg = {
           sender: "user",
           message: trimmed,
@@ -241,6 +258,7 @@
         setMessages(prev => [...prev, userMsg]);
         setInput("");
 
+        // Send the message to the backend.
         fetch("https://baniakjr.com/api/chat", {
           method: "POST",
           headers: { "Content-Type": "application/json" },
@@ -263,6 +281,7 @@
           });
       };
 
+      // Allow sending the message by pressing Enter.
       const handleKeyPress = (e) => {
         if (e.key === "Enter") {
           sendMessage();
@@ -278,10 +297,12 @@
                   {msg.sender === "bot" && (
                     <img src={botAvatar} alt="Bot Avatar" className="avatar" />
                   )}
-                  <div
-                    className="message-content"
-                    dangerouslySetInnerHTML={{ __html: formatMessage(msg.message) }}
-                  />
+                  <div className="message-content">
+                    {msg.message}
+                    <div style={{ fontSize: "0.7em", textAlign: "right", marginTop: "5px", color: "#666" }}>
+                      {new Date(msg.timestamp).toLocaleTimeString()}
+                    </div>
+                  </div>
                   {msg.sender === "user" && (
                     <img src={userAvatar} alt="User Avatar" className="avatar" />
                   )}
