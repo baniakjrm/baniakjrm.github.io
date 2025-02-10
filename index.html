@@ -216,7 +216,7 @@
   <!-- Root for our React app -->
   <div id="root"></div>
 
-  <script type="text/babel">
+<script type="text/babel">
   // Helper to escape HTML special characters
   function escapeHtml(unsafe) {
     return unsafe
@@ -228,15 +228,30 @@
   }
 
   // Process inline markdown:
-  // - **text** becomes bold
-  // - URLs become clickable links
+  // - Markdown links: [text](url) become clickable links.
+  // - **text** becomes bold.
+  // - Plain URLs become clickable links.
   function processInline(text) {
-    // First escape to avoid accidental HTML injection
+    // First escape HTML to avoid injection.
     text = escapeHtml(text);
+
+    // Convert Markdown links: [text](url)
+    // Example: [Troomi](https://www.troomi.com)
+    text = text.replace(
+      /\[([^\]]+)\]\((https?:\/\/[^\)]+)\)/g,
+      '<a href="$2" target="_blank" rel="noopener noreferrer">$1</a>'
+    );
+
     // Replace **text** with <strong>text</strong>
     text = text.replace(/\*\*(.*?)\*\*/g, '<strong>$1</strong>');
-    // Convert URLs into clickable links.
-    text = text.replace(/(https?:\/\/[^\s]+)/g, '<a href="$1" target="_blank" rel="noopener noreferrer">$1</a>');
+
+    // Convert bare URLs into clickable links.
+    // The negative lookbehind (?<!href=") prevents matching URLs that are already part of an anchor.
+    text = text.replace(
+      /(?<!href=")(https?:\/\/[^\s<]+)/g,
+      '<a href="$1" target="_blank" rel="noopener noreferrer">$1</a>'
+    );
+
     return text;
   }
 
