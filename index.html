@@ -217,114 +217,167 @@
   <div id="root"></div>
 
   <script type="text/babel">
-    function ChatApp() {
-      const [messages, setMessages] = React.useState([]);
-      const [input, setInput] = React.useState("");
-      const chatContainerRef = React.useRef(null);
+  // Helper to escape HTML special characters
+  function escapeHtml(unsafe) {
+    return unsafe
+      .replace(/&/g, "&amp;")
+      .replace(/</g, "&lt;")
+      .replace(/>/g, "&gt;")
+      .replace(/"/g, "&quot;")
+      .replace(/'/g, "&#039;");
+  }
 
-      // Update these with your preferred avatar URLs.
-      const botAvatar = "https://baniakjrm.github.io/images/PromptlyKids.png_0d98_resized.png";
-      const userAvatar = "https://baniakjrm.github.io/images/34AD2.jpg";
+  // Process inline markdown:
+  // - **text** becomes bold
+  // - URLs become clickable links
+  function processInline(text) {
+    // First escape to avoid accidental HTML injection
+    text = escapeHtml(text);
+    // Replace **text** with <strong>text</strong>
+    text = text.replace(/\*\*(.*?)\*\*/g, '<strong>$1</strong>');
+    // Convert URLs into clickable links.
+    text = text.replace(/(https?:\/\/[^\s]+)/g, '<a href="$1" target="_blank" rel="noopener noreferrer">$1</a>');
+    return text;
+  }
 
-      // Scroll to the bottom of the chat window when new messages arrive.
-      const scrollToBottom = () => {
-        if (chatContainerRef.current) {
-          chatContainerRef.current.scrollTop = chatContainerRef.current.scrollHeight;
+  // Parse the entire message.
+  // If the message contains dashes ("-") then:
+  //  • The text before the first dash is a normal paragraph.
+  //  • Each subsequent dash-delimited piece becomes a bullet list item.
+  function parseMessage(message) {
+    // Split on dash markers with optional whitespace around them.
+    const parts = message.split(/\s*-\s*/);
+    let html = "";
+    if (parts.length > 1) {
+      // Use the first part as an introductory paragraph.
+      if (parts[0].trim() !== "") {
+        html += "<p>" + processInline(parts[0]) + "</p>";
+      }
+      html += "<ul>";
+      // Process each bullet point.
+      for (let i = 1; i < parts.length; i++) {
+        if (parts[i].trim() !== "") {
+          html += "<li>" + processInline(parts[i]) + "</li>";
         }
-      };
+      }
+      html += "</ul>";
+    } else {
+      // No bullet list; just process inline formatting.
+      html += "<p>" + processInline(message) + "</p>";
+    }
+    return html;
+  }
 
-      // Fetch the initial welcome message from the backend.
-      React.useEffect(() => {
-        fetch("https://baniakjr.com/api/chat")
-          .then(response => response.json())
-          .then(data => {
-            setMessages(prev => [...prev, data]);
-            scrollToBottom();
-          })
-          .catch(err => console.error("Error fetching initial message:", err));
-      }, []);
+  function ChatApp() {
+    const [messages, setMessages] = React.useState([]);
+    const [input, setInput] = React.useState("");
+    const chatContainerRef = React.useRef(null);
 
-      // Send the user message to the backend and append both user and bot messages.
-      const sendMessage = () => {
-        const trimmed = input.trim();
-        if (!trimmed) return;
+    // Update these with your preferred avatar URLs.
+    const botAvatar = "https://baniakjrm.github.io/images/PromptlyKids.png_0d98_resized.png";
+    const userAvatar = "https://baniakjrm.github.io/images/34AD2.jpg";
 
-        // Append the user's message first.
-        const userMsg = {
-          sender: "user",
-          message: trimmed,
-          timestamp: new Date().toISOString()
-        };
-        setMessages(prev => [...prev, userMsg]);
-        setInput("");
+    // Scroll to the bottom of the chat window when new messages arrive.
+    const scrollToBottom = () => {
+      if (chatContainerRef.current) {
+        chatContainerRef.current.scrollTop = chatContainerRef.current.scrollHeight;
+      }
+    };
 
-        // Send the message to the backend.
-        fetch("https://baniakjr.com/api/chat", {
-          method: "POST",
-          headers: { "Content-Type": "application/json" },
-          body: JSON.stringify({ message: trimmed })
+    // Fetch the initial welcome message from the backend.
+    React.useEffect(() => {
+      fetch("https://baniakjr.com/api/chat")
+        .then(response => response.json())
+        .then(data => {
+          setMessages(prev => [...prev, data]);
+          scrollToBottom();
         })
-          .then(response => response.json())
-          .then(data => {
-            setMessages(prev => [...prev, data]);
-            scrollToBottom();
-          })
-          .catch(err => {
-            console.error("Error sending message:", err);
-            const errorMsg = {
-              sender: "bot",
-              message: "There was an error processing your message.",
-              timestamp: new Date().toISOString()
-            };
-            setMessages(prev => [...prev, errorMsg]);
-            scrollToBottom();
-          });
-      };
+        .catch(err => console.error("Error fetching initial message:", err));
+    }, []);
 
-      // Allow sending the message by pressing Enter.
-      const handleKeyPress = (e) => {
-        if (e.key === "Enter") {
-          sendMessage();
-        }
-      };
+    // Send the user message to the backend and append both user and bot messages.
+    const sendMessage = () => {
+      const trimmed = input.trim();
+      if (!trimmed) return;
 
-      return (
-        <div className="app-container">
-          <div className="wrapper">
-            <div className="chat-container" ref={chatContainerRef}>
-              {messages.map((msg, index) => (
-                <div key={index} className={`message ${msg.sender}`}>
-                  {msg.sender === "bot" && (
-                    <img src={botAvatar} alt="Bot Avatar" className="avatar" />
-                  )}
-                  <div className="message-content">
-                    {msg.message}
-                    <div style={{ fontSize: "0.7em", textAlign: "right", marginTop: "5px", color: "#666" }}>
-                      {new Date(msg.timestamp).toLocaleTimeString()}
-                    </div>
+      // Append the user's message first.
+      const userMsg = {
+        sender: "user",
+        message: trimmed,
+        timestamp: new Date().toISOString()
+      };
+      setMessages(prev => [...prev, userMsg]);
+      setInput("");
+
+      // Send the message to the backend.
+      fetch("https://baniakjr.com/api/chat", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ message: trimmed })
+      })
+        .then(response => response.json())
+        .then(data => {
+          setMessages(prev => [...prev, data]);
+          scrollToBottom();
+        })
+        .catch(err => {
+          console.error("Error sending message:", err);
+          const errorMsg = {
+            sender: "bot",
+            message: "There was an error processing your message.",
+            timestamp: new Date().toISOString()
+          };
+          setMessages(prev => [...prev, errorMsg]);
+          scrollToBottom();
+        });
+    };
+
+    // Allow sending the message by pressing Enter.
+    const handleKeyPress = (e) => {
+      if (e.key === "Enter") {
+        sendMessage();
+      }
+    };
+
+    return (
+      <div className="app-container">
+        <div className="wrapper">
+          <div className="chat-container" ref={chatContainerRef}>
+            {messages.map((msg, index) => (
+              <div key={index} className={`message ${msg.sender}`}>
+                {msg.sender === "bot" && (
+                  <img src={botAvatar} alt="Bot Avatar" className="avatar" />
+                )}
+                <div className="message-content">
+                  {/* Use dangerouslySetInnerHTML to render the processed HTML */}
+                  <div dangerouslySetInnerHTML={{ __html: parseMessage(msg.message) }} />
+                  <div style={{ fontSize: "0.7em", textAlign: "right", marginTop: "5px", color: "#666" }}>
+                    {new Date(msg.timestamp).toLocaleTimeString()}
                   </div>
-                  {msg.sender === "user" && (
-                    <img src={userAvatar} alt="User Avatar" className="avatar" />
-                  )}
                 </div>
-              ))}
-            </div>
-            <div className="input-container">
-              <input
-                type="text"
-                placeholder="Type your message..."
-                value={input}
-                onChange={(e) => setInput(e.target.value)}
-                onKeyPress={handleKeyPress}
-              />
-              <button onClick={sendMessage}>Send</button>
-            </div>
+                {msg.sender === "user" && (
+                  <img src={userAvatar} alt="User Avatar" className="avatar" />
+                )}
+              </div>
+            ))}
+          </div>
+          <div className="input-container">
+            <input
+              type="text"
+              placeholder="Type your message..."
+              value={input}
+              onChange={(e) => setInput(e.target.value)}
+              onKeyPress={handleKeyPress}
+            />
+            <button onClick={sendMessage}>Send</button>
           </div>
         </div>
-      );
-    }
+      </div>
+    );
+  }
 
-    ReactDOM.render(<ChatApp />, document.getElementById("root"));
-  </script>
+  ReactDOM.render(<ChatApp />, document.getElementById("root"));
+</script>
+
 </body>
 </html>
