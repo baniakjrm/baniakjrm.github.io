@@ -6,7 +6,7 @@
   <title>Infinite Rainbow Labyrinth (Web)</title>
   <style>
     html, body { margin: 0; height: 100%; background: #000; color: #fff; font-family: system-ui, Segoe UI, Roboto, Helvetica, Arial, sans-serif; }
-    #canvas { display: block; margin: 0 auto; image-rendering: pixelated; }
+    #canvas { display: block; margin: 0 auto; image-rendering: pixelated; touch-action: none; }
     #hud { position: fixed; left: 12px; top: 10px; font-size: 14px; opacity: 0.9; user-select: none; }
     #help { position: fixed; left: 12px; top: 30px; font-size: 12px; color: #bfbfbf; opacity: 0.9; user-select: none; }
   </style>
@@ -14,7 +14,7 @@
 <body>
   <canvas id="canvas" width="960" height="600"></canvas>
   <div id="hud"></div>
-  <div id="help">Move: W/S, Look: A/D or ←/→, Reset: R</div>
+  <div id="help">Move: W/S, Look: A/D or ←/→, Reset: R · Touch: left=look left, middle=forward, right=look right (hold to continue)</div>
   <script>
   // ------------------------------------------------------------
   // Infinite (no-global-memory) Zelda-style labyrinth raycaster (Web)
@@ -430,6 +430,38 @@
   });
   window.addEventListener('keyup', (e) => keys.delete(e.code));
 
+  // Touch controls: tap/hold left third = look left, middle = forward, right = look right
+  let touchForward = false, touchLeft = false, touchRight = false;
+  function updateTouchFlagsFromTouches(touches) {
+    touchForward = touchLeft = touchRight = false;
+    const rect = canvas.getBoundingClientRect();
+    const third = rect.width / 3;
+    for (let i = 0; i < touches.length; i++) {
+      const x = touches[i].clientX - rect.left;
+      if (x < third) touchLeft = true;
+      else if (x < 2 * third) touchForward = true;
+      else touchRight = true;
+    }
+  }
+  function clearTouches() { touchForward = touchLeft = touchRight = false; }
+  canvas.addEventListener('touchstart', (e) => {
+    e.preventDefault();
+    updateTouchFlagsFromTouches(e.touches);
+  }, { passive: false });
+  canvas.addEventListener('touchmove', (e) => {
+    e.preventDefault();
+    updateTouchFlagsFromTouches(e.touches);
+  }, { passive: false });
+  canvas.addEventListener('touchend', (e) => {
+    e.preventDefault();
+    updateTouchFlagsFromTouches(e.touches);
+    if (e.touches.length === 0) clearTouches();
+  }, { passive: false });
+  canvas.addEventListener('touchcancel', (e) => {
+    e.preventDefault();
+    clearTouches();
+  }, { passive: false });
+
   // ---------------- Rendering ----------------
   function fillRectColor(x, y, w, h, rgb) {
     ctx.fillStyle = `rgb(${rgb[0]},${rgb[1]},${rgb[2]})`;
@@ -443,8 +475,8 @@
 
     // Rotation
     let rot = 0.0;
-    if (keys.has('KeyD') || keys.has('ArrowRight')) rot += ROT_SPEED * dt * 3;
-    if (keys.has('KeyA') || keys.has('ArrowLeft'))  rot -= ROT_SPEED * dt * 3;
+    if (keys.has('KeyD') || keys.has('ArrowRight') || touchRight) rot += ROT_SPEED * dt * 3;
+    if (keys.has('KeyA') || keys.has('ArrowLeft')  || touchLeft)  rot -= ROT_SPEED * dt * 3;
     if (rot !== 0.0) {
       const cos = Math.cos(rot), sin = Math.sin(rot);
       const oldDirX = dirX;
@@ -457,7 +489,7 @@
 
     // Movement
     const move = MOVE_SPEED * dt * 3;
-    if (keys.has('KeyW')) {
+    if (keys.has('KeyW') || touchForward) {
       const nx = posX + dirX * move, ny = posY + dirY * move;
       if (can_move(nx, posY)) posX = nx;
       if (can_move(posX, ny)) posY = ny;
