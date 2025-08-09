@@ -1,398 +1,543 @@
 <!DOCTYPE html>
-<html>
+<html lang="en">
 <head>
-  <meta charset="utf-8">
-  <title>ChatGPT Wrapper Demo</title>
-
-  <!-- Disable user zooming on mobile, and ensure viewport scaling is fixed -->
-  <meta name="viewport" content="width=device-width, initial-scale=1, maximum-scale=1, user-scalable=no">
-
+  <meta charset="utf-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1" />
+  <title>Infinite Rainbow Labyrinth (Web)</title>
   <style>
-    /* Make the page fill the browser window */
-    html, body {
-      margin: 0;
-      padding: 0;
-      height: 100%;
-      font-family: Arial, sans-serif;
-      background: #f0f0f0;
-      /* Prevent text resizing on iOS Safari */
-      -webkit-text-size-adjust: none;
-    }
-
-    /* White top bar at the top of the screen */
-    .top-bar {
-      width: 100%;
-      height: 5vh; /* Desktop: 5% of viewport height */
-      background-color: #fff;
-      border-bottom: 1px solid #ccc;
-    }
-
-    /* Container that occupies the full viewport minus the top bar */
-    .app-container {
-      display: flex;
-      flex-direction: column;
-      min-height: 95vh; /* Complements the 5vh top bar on desktop */
-      /* On mobile we might override this, but it’s fine as a base */
-      box-sizing: border-box;
-    }
-
-    /* 
-      .wrapper:
-      - 50% of the viewport width (desktop)
-      - Centered with margin: 0 auto
-      - Minimum width to avoid being too narrow on small screens
-      - Maximum width to avoid being too wide on large screens 
-    */
-    .wrapper {
-      flex: 1;
-      width: 50vw;
-      min-width: 480px;
-      max-width: 1080px;
-      margin: 0 auto;
-      display: flex;
-      flex-direction: column;
-      padding: 0 20px; /* horizontal padding */
-      box-sizing: border-box;
-      position: relative;
-    }
-
-    /* Chat window styling */
-    .chat-container {
-      flex: 1;               /* expand to fill vertical space */
-      padding: 10px;
-      overflow-y: auto;
-      background: #F0F0F0;
-      box-sizing: border-box;
-      border-radius: 4px;
-      margin-bottom: 10px;   /* small gap above input box (desktop) */
-    }
-
-    .message {
-      display: flex;
-      margin: 10px;
-    }
-
-    .message.bot {
-      justify-content: flex-start;
-    }
-
-    .message.user {
-      justify-content: flex-end;
-    }
-
-    .message-content {
-      max-width: 60%;
-      padding: 10px;
-      border-radius: 10px;
-      word-wrap: break-word;
-    }
-
-    /* Bot messages (left side) */
-    .message.bot .message-content {
-      background: #fff;
-      border: 1px solid #ccc;
-      margin-left: 10px;
-    }
-
-    /* User messages (right side) */
-    .message.user .message-content {
-      background: #dcf8c6;
-      border: 1px solid #97c97e;
-      margin-right: 10px;
-    }
-
-    /* Avatar styling */
-    .avatar {
-      width: 40px;
-      height: 40px;
-      border-radius: 50%;
-      background: #ccc;
-      flex-shrink: 0;
-    }
-
-    /* Input area pinned to the bottom (desktop layout can remain at the bottom, but not fixed) */
-    .input-container {
-      display: flex;
-      padding: 10px 0;
-      background: #fff;
-      border-top: 1px solid #ccc;
-    }
-
-    .input-container input {
-      flex: 1;
-      padding: 10px;
-      font-size: 16px; /* ensures iOS won't zoom in */
-      border: 1px solid #ccc;
-      border-radius: 4px;
-    }
-
-    .input-container button {
-      margin-left: 10px;
-      padding: 10px 20px;
-      font-size: 16px; /* ensures iOS won't zoom in */
-      border: none;
-      background: #28a745;
-      color: #fff;
-      border-radius: 4px;
-      cursor: pointer;
-    }
-
-    /* =========================================
-       MEDIA QUERY for screens 600px or smaller
-       ========================================= */
-    @media (max-width: 600px) {
-      /* Make the top bar slightly taller on small screens if you want, or keep it. */
-      .top-bar {
-        height: 8vh;
-      }
-
-      .app-container {
-        min-height: 92vh; /* total (8vh + 92vh) = 100vh for mobile */
-      }
-
-      /* Make the wrapper use full width on small screens */
-      .wrapper {
-        width: 100vw;
-        min-width: auto;
-        max-width: auto;
-        margin: 0;
-        padding: 0 10px;
-      }
-
-      /* Smaller avatars */
-      .avatar {
-        width: 30px;
-        height: 30px;
-      }
-
-      /* Adjust message container styles */
-      .message-content {
-        max-width: 80%;
-        padding: 8px;
-        font-size: 14px;
-      }
-
-      /* The key part: keep the input container fixed to the bottom */
-      .input-container {
-        position: fixed;
-        bottom: 0;
-        left: 0;
-        right: 0;
-        padding: 8px 10px;
-        margin: 0 auto;
-        border-top: 1px solid #ccc;
-        background: #fff;
-        box-sizing: border-box;
-      }
-
-      /* Because the input container is fixed, give the chat container bottom padding
-         so messages don’t disappear behind the fixed input container */
-      .chat-container {
-        margin-bottom: 60px; /* ~ the height of the input container + spacing */
-      }
-
-      .input-container input {
-        font-size: 16px; /* Enough to prevent iOS zoom */
-        padding: 8px;
-      }
-
-      .input-container button {
-        font-size: 16px; /* Enough to prevent iOS zoom */
-        padding: 8px 12px;
-      }
-    }
+    html, body { margin: 0; height: 100%; background: #000; color: #fff; font-family: system-ui, Segoe UI, Roboto, Helvetica, Arial, sans-serif; }
+    #canvas { display: block; margin: 0 auto; image-rendering: pixelated; }
+    #hud { position: fixed; left: 12px; top: 10px; font-size: 14px; opacity: 0.9; user-select: none; }
+    #help { position: fixed; left: 12px; top: 30px; font-size: 12px; color: #bfbfbf; opacity: 0.9; user-select: none; }
   </style>
-
-  <!-- Load React, ReactDOM, and Babel from CDNs -->
-  <script src="https://unpkg.com/react@17/umd/react.development.js" crossorigin></script>
-  <script src="https://unpkg.com/react-dom@17/umd/react-dom.development.js" crossorigin></script>
-  <!-- Babel allows writing JSX directly in the browser -->
-  <script src="https://unpkg.com/babel-standalone@6/babel.min.js"></script>
 </head>
 <body>
-  <!-- White top bar -->
-  <div class="top-bar"></div>
+  <canvas id="canvas" width="960" height="600"></canvas>
+  <div id="hud"></div>
+  <div id="help">Move: W/S, Look: A/D or ←/→, Reset: R</div>
+  <script>
+  // ------------------------------------------------------------
+  // Infinite (no-global-memory) Zelda-style labyrinth raycaster (Web)
+  // - Ported from a Pygame reference implementation
+  // - Rainbow wall colors per tile
+  // - Move:  W/S forward/back
+  // - Look:  A/D or Left/Right arrows
+  // - Reset: R
+  // ------------------------------------------------------------
 
-  <!-- Root for our React app -->
-  <div id="root"></div>
+  // ---------------- Canvas & timing ----------------
+  const canvas = document.getElementById('canvas');
+  const ctx = canvas.getContext('2d', { alpha: false });
+  let W = canvas.width;
+  let H = canvas.height;
+  let HALF_H = (H / 2) | 0;
 
-<script type="text/babel">
-  // Helper to escape HTML special characters
-  function escapeHtml(unsafe) {
-    return unsafe
-      .replace(/&/g, "&amp;")
-      .replace(/</g, "&lt;")
-      .replace(/>/g, "&gt;")
-      .replace(/"/g, "&quot;")
-      .replace(/'/g, "&#039;");
-  }
-
-  // Process inline markdown:
-  // - Markdown links: [text](url) become clickable links.
-  // - **text** becomes bold.
-  // - Plain URLs become clickable links.
-  function processInline(text) {
-    // First escape HTML to avoid injection.
-    text = escapeHtml(text);
-
-    // Convert Markdown links: [text](url)
-    // Example: [Troomi](https://www.troomi.com)
-    text = text.replace(
-      /\[([^\]]+)\]\((https?:\/\/[^\)]+)\)/g,
-      '<a href="$2" target="_blank" rel="noopener noreferrer">$1</a>'
-    );
-
-    // Replace **text** with <strong>text</strong>
-    text = text.replace(/\*\*(.*?)\*\*/g, '<strong>$1</strong>');
-
-    // Convert bare URLs into clickable links.
-    // The negative lookbehind (?<!href=") prevents matching URLs that are already part of an anchor.
-    text = text.replace(
-      /(?<!href=")(https?:\/\/[^\s<]+)/g,
-      '<a href="$1" target="_blank" rel="noopener noreferrer">$1</a>'
-    );
-
-    return text;
-  }
-
-  // Parse the entire message.
-  // If the message contains dashes ("-") then:
-  //  • The text before the first dash is a normal paragraph.
-  //  • Each subsequent dash-delimited piece becomes a bullet list item.
-  function parseMessage(message) {
-    // Split on dash markers with optional whitespace around them.
-    const parts = message.split(/\s*-\s*/);
-    let html = "";
-    if (parts.length > 1) {
-      // Use the first part as an introductory paragraph.
-      if (parts[0].trim() !== "") {
-        html += "<p>" + processInline(parts[0]) + "</p>";
-      }
-      html += "<ul>";
-      // Process each bullet point.
-      for (let i = 1; i < parts.length; i++) {
-        if (parts[i].trim() !== "") {
-          html += "<li>" + processInline(parts[i]) + "</li>";
-        }
-      }
-      html += "</ul>";
+  function resizeToWindow() {
+    // Keep a consistent internal resolution for performance; scale with CSS
+    const maxW = Math.min(window.innerWidth, 1280);
+    const maxH = Math.min(window.innerHeight, 720);
+    // Maintain 16:10-ish aspect similar to 960x600
+    let targetW = 960, targetH = 600;
+    if (maxW / maxH < targetW / targetH) {
+      const scale = maxW / targetW;
+      canvas.style.width = Math.round(targetW * scale) + 'px';
+      canvas.style.height = Math.round(targetH * scale) + 'px';
     } else {
-      // No bullet list; just process inline formatting.
-      html += "<p>" + processInline(message) + "</p>";
+      const scale = maxH / targetH;
+      canvas.style.width = Math.round(targetW * scale) + 'px';
+      canvas.style.height = Math.round(targetH * scale) + 'px';
     }
-    return html;
+  }
+  window.addEventListener('resize', resizeToWindow);
+  resizeToWindow();
+
+  // Colors
+  const SKY = [0,0,0];
+  const FLOOR = [0,0,0];
+
+  // ---------------- Raycaster world ----------------
+  let WORLD = [];
+  let WORLD_W = 0;
+  let WORLD_H = 0;
+
+  const WALL_COLOR = new Map(); // id -> [r,g,b]
+  const BOUNDARY_ID = 7;
+  WALL_COLOR.set(BOUNDARY_ID, [0,0,0]);
+
+  // Camera
+  let posX = 8.0, posY = 8.0;
+  let dirX = 1.0, dirY = 0.0;
+  let planeX = 0.0, planeY = 0.66;
+  const MOVE_SPEED = 3.2;
+  const ROT_SPEED = 1.0;
+
+  // Tile/grid settings
+  const TILE = 18;
+  const DOOR_W = 4;
+  const PATH_W = 3;
+  const BORDER = 2;
+  const GRID_SIDE = 3; // 3x3 grid: center + neighbors
+  WORLD_W = BORDER * 2 + TILE * GRID_SIDE;
+  WORLD_H = WORLD_W; // square
+
+  // Directions: 0=N,1=E,2=S,3=W
+  const DX = [0, 1, 0, -1];
+  const DY = [-1, 0, 1, 0];
+  const DIR_NAME = ['N','E','S','W'];
+  const left_of = d => (d + 3) % 4;
+  const right_of = d => (d + 1) % 4;
+  const opposite = d => (d + 2) % 4;
+
+  class Tile {
+    constructor(orient_dir, kind, open_sides, wall_id, color, label) {
+      this.orient_dir = orient_dir;   // immutable orientation
+      this.kind = kind;               // 'room3', 'dead', 'straight', 'Lleft', 'Lright'
+      this.open_sides = new Set(open_sides);
+      this.wall_id = wall_id;
+      this.color = color;             // [r,g,b]
+      this.label = label;
+      this.neighbors = new Map();     // dir -> Tile
+    }
   }
 
-  function ChatApp() {
-    const [messages, setMessages] = React.useState([]);
-    const [input, setInput] = React.useState("");
-    const chatContainerRef = React.useRef(null);
+  // Labyrinth state
+  let current_tile = null;
+  let prev_tile = null;
+  // Map<Tile, [ox, oy]>
+  const tile_positions = new Map();
+  let wall_id_counter = 10;
 
-    // Update these with your preferred avatar URLs.
-    const botAvatar = "https://baniakjrm.github.io/images/PromptlyKids.png_0d98_resized.png";
-    const userAvatar = "https://baniakjrm.github.io/images/34AD2.jpg";
-
-    // Scroll to the bottom of the chat window when new messages arrive.
-    const scrollToBottom = () => {
-      if (chatContainerRef.current) {
-        chatContainerRef.current.scrollTop = chatContainerRef.current.scrollHeight;
-      }
-    };
-
-    // Fetch the initial welcome message from the backend.
-    React.useEffect(() => {
-      fetch("https://baniakjr.com/api/chat")
-        .then(response => response.json())
-        .then(data => {
-          setMessages(prev => [...prev, data]);
-          scrollToBottom();
-        })
-        .catch(err => console.error("Error fetching initial message:", err));
-    }, []);
-
-    // Send the user message to the backend and append both user and bot messages.
-    const sendMessage = () => {
-      const trimmed = input.trim();
-      if (!trimmed) return;
-
-      // Append the user's message first.
-      const userMsg = {
-        sender: "user",
-        message: trimmed,
-        timestamp: new Date().toISOString()
-      };
-      setMessages(prev => [...prev, userMsg]);
-      setInput("");
-
-      // Send the message to the backend.
-      fetch("https://baniakjr.com/api/chat", {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ message: trimmed })
-      })
-        .then(response => response.json())
-        .then(data => {
-          setMessages(prev => [...prev, data]);
-          scrollToBottom();
-        })
-        .catch(err => {
-          console.error("Error sending message:", err);
-          const errorMsg = {
-            sender: "bot",
-            message: "There was an error processing your message.",
-            timestamp: new Date().toISOString()
-          };
-          setMessages(prev => [...prev, errorMsg]);
-          scrollToBottom();
-        });
-    };
-
-    // Allow sending the message by pressing Enter.
-    const handleKeyPress = (e) => {
-      if (e.key === "Enter") {
-        sendMessage();
-      }
-    };
-
-    return (
-      <div className="app-container">
-        <div className="wrapper">
-          <div className="chat-container" ref={chatContainerRef}>
-            {messages.map((msg, index) => (
-              <div key={index} className={`message ${msg.sender}`}>
-                {msg.sender === "bot" && (
-                  <img src={botAvatar} alt="Bot Avatar" className="avatar" />
-                )}
-                <div className="message-content">
-                  {/* Use dangerouslySetInnerHTML to render the processed HTML */}
-                  <div dangerouslySetInnerHTML={{ __html: parseMessage(msg.message) }} />
-                  <div style={{ fontSize: "0.7em", textAlign: "right", marginTop: "5px", color: "#666" }}>
-                    {new Date(msg.timestamp).toLocaleTimeString()}
-                  </div>
-                </div>
-                {msg.sender === "user" && (
-                  <img src={userAvatar} alt="User Avatar" className="avatar" />
-                )}
-              </div>
-            ))}
-          </div>
-          <div className="input-container">
-            <input
-              type="text"
-              placeholder="Type your message..."
-              value={input}
-              onChange={(e) => setInput(e.target.value)}
-              onKeyPress={handleKeyPress}
-            />
-            <button onClick={sendMessage}>Send</button>
-          </div>
-        </div>
-      </div>
-    );
+  function hsvToRgb(h, s, v) {
+    let r=0, g=0, b=0;
+    let i = Math.floor(h * 6);
+    let f = h * 6 - i;
+    let p = v * (1 - s);
+    let q = v * (1 - f * s);
+    let t = v * (1 - (1 - f) * s);
+    switch (i % 6) {
+      case 0: r=v; g=t; b=p; break;
+      case 1: r=q; g=v; b=p; break;
+      case 2: r=p; g=v; b=t; break;
+      case 3: r=p; g=q; b=v; break;
+      case 4: r=t; g=p; b=v; break;
+      case 5: r=v; g=p; b=q; break;
+    }
+    return [ (r*255)|0, (g*255)|0, (b*255)|0 ];
   }
 
-  ReactDOM.render(<ChatApp />, document.getElementById("root"));
-</script>
+  function rand_rainbow() {
+    const h = Math.random();
+    const s = 0.9;
+    const v = 1.0;
+    return hsvToRgb(h, s, v);
+  }
 
+  function next_wall_id_with_color() {
+    const wid = wall_id_counter++;
+    const color = rand_rainbow();
+    WALL_COLOR.set(wid, color);
+    return [wid, color];
+  }
+
+  function generate_tile(orient_dir) {
+    const kinds = ['room3', 'dead', 'straight', 'Lleft', 'Lright'];
+    const weights = [0.30, 0.12, 0.28, 0.15, 0.15];
+    // weighted choice
+    let r = Math.random();
+    let acc = 0;
+    let kind = kinds[0];
+    for (let i=0;i<kinds.length;i++) { acc += weights[i]; if (r <= acc) { kind = kinds[i]; break; } }
+
+    const forward = opposite(orient_dir);
+    const L = left_of(orient_dir);
+    const R = right_of(orient_dir);
+
+    let open_sides, exits_label;
+    if (kind === 'room3') { open_sides = new Set([orient_dir, forward, L, R]); exits_label = '3 exits'; }
+    else if (kind === 'dead') { open_sides = new Set([orient_dir]); exits_label = 'dead end'; }
+    else if (kind === 'straight') { open_sides = new Set([orient_dir, forward]); exits_label = 'straight'; }
+    else if (kind === 'Lleft') { open_sides = new Set([orient_dir, L]); exits_label = 'L-left'; }
+    else if (kind === 'Lright') { open_sides = new Set([orient_dir, R]); exits_label = 'L-right'; }
+    else { open_sides = new Set([orient_dir]); exits_label = '?'; }
+
+    const [wid, color] = next_wall_id_with_color();
+    const label = `${kind} (${exits_label})`;
+    return new Tile(orient_dir, kind, open_sides, wid, color, label);
+  }
+
+  function empty_world() {
+    WORLD_W = BORDER * 2 + TILE * GRID_SIDE;
+    WORLD_H = WORLD_W;
+    WORLD = new Array(WORLD_H);
+    for (let y=0; y<WORLD_H; y++) {
+      WORLD[y] = new Array(WORLD_W).fill(0);
+    }
+    // Outer boundary
+    for (let x=0; x<WORLD_W; x++) {
+      WORLD[0][x] = BOUNDARY_ID;
+      WORLD[WORLD_H-1][x] = BOUNDARY_ID;
+    }
+    for (let y=0; y<WORLD_H; y++) {
+      WORLD[y][0] = BOUNDARY_ID;
+      WORLD[y][WORLD_W-1] = BOUNDARY_ID;
+    }
+  }
+
+  function carve_door(edge, ox, oy) {
+    const cx = (ox + (TILE/2)|0);
+    const cy = (oy + (TILE/2)|0);
+    const half = (DOOR_W/2)|0;
+    if (edge === 0) { // N
+      const y = oy;
+      for (let i=-half; i<=half; i++) WORLD[y][cx + i] = 0;
+    } else if (edge === 2) { // S
+      const y = oy + TILE - 1;
+      for (let i=-half; i<=half; i++) WORLD[y][cx + i] = 0;
+    } else if (edge === 1) { // E
+      const x = ox + TILE - 1;
+      for (let i=-half; i<=half; i++) WORLD[cy + i][x] = 0;
+    } else if (edge === 3) { // W
+      const x = ox;
+      for (let i=-half; i<=half; i++) WORLD[cy + i][x] = 0;
+    }
+  }
+
+  function draw_border_box(ox, oy, wid) {
+    // top & bottom
+    for (let x=ox; x<ox+TILE; x++) {
+      WORLD[oy][x] = wid;
+      WORLD[oy + TILE - 1][x] = wid;
+    }
+    // left & right
+    for (let y=oy; y<oy+TILE; y++) {
+      WORLD[y][ox] = wid;
+      WORLD[y][ox + TILE - 1] = wid;
+    }
+  }
+
+  function fill_interior(ox, oy, wid) {
+    for (let y=oy+1; y<oy+TILE-1; y++) {
+      for (let x=ox+1; x<ox+TILE-1; x++) {
+        WORLD[y][x] = wid;
+      }
+    }
+  }
+
+  function carve_rect(x0, y0, x1, y1) {
+    if (x0 > x1) { let t=x0; x0=x1; x1=t; }
+    if (y0 > y1) { let t=y0; y0=y1; y1=t; }
+    x0 = Math.max(1, x0); y0 = Math.max(1, y0);
+    x1 = Math.min(WORLD_W-2, x1); y1 = Math.min(WORLD_H-2, y1);
+    for (let y=y0; y<=y1; y++) {
+      for (let x=x0; x<=x1; x++) {
+        WORLD[y][x] = 0;
+      }
+    }
+  }
+
+  function build_room(ox, oy, tile) {
+    draw_border_box(ox, oy, tile.wall_id);
+    for (const side of tile.open_sides) carve_door(side, ox, oy);
+    // interior remains open
+  }
+
+  function build_hall_straight(ox, oy, tile) {
+    draw_border_box(ox, oy, tile.wall_id);
+    fill_interior(ox, oy, tile.wall_id);
+    const cx = (ox + (TILE/2)|0);
+    const cy = (oy + (TILE/2)|0);
+    if (tile.orient_dir === 0 || tile.orient_dir === 2) {
+      carve_rect(cx - (PATH_W>>1), oy+1, cx + (PATH_W>>1), oy + TILE - 2);
+    } else {
+      carve_rect(ox+1, cy - (PATH_W>>1), ox + TILE - 2, cy + (PATH_W>>1));
+    }
+    for (const side of tile.open_sides) carve_door(side, ox, oy);
+  }
+
+  function build_hall_L(ox, oy, tile, turn_to) {
+    draw_border_box(ox, oy, tile.wall_id);
+    fill_interior(ox, oy, tile.wall_id);
+    const cx = (ox + (TILE/2)|0);
+    const cy = (oy + (TILE/2)|0);
+    if (tile.orient_dir === 0 || tile.orient_dir === 2) {
+      carve_rect(cx - (PATH_W>>1), oy+1, cx + (PATH_W>>1), cy);
+    } else {
+      carve_rect(ox+1, cy - (PATH_W>>1), cx, cy + (PATH_W>>1));
+    }
+    if (turn_to === 0 || turn_to === 2) {
+      carve_rect(cx - (PATH_W>>1), cy, cx + (PATH_W>>1), oy + TILE - 2);
+    } else {
+      carve_rect(cx, cy - (PATH_W>>1), ox + TILE - 2, cy + (PATH_W>>1));
+    }
+    for (const side of tile.open_sides) carve_door(side, ox, oy);
+  }
+
+  function build_tile_at(ox, oy, tile) {
+    if (tile.kind === 'room3' || tile.kind === 'dead') {
+      build_room(ox, oy, tile);
+    } else if (tile.kind === 'straight') {
+      build_hall_straight(ox, oy, tile);
+    } else if (tile.kind === 'Lleft') {
+      build_hall_L(ox, oy, tile, left_of(tile.orient_dir));
+    } else if (tile.kind === 'Lright') {
+      build_hall_L(ox, oy, tile, right_of(tile.orient_dir));
+    } else {
+      build_room(ox, oy, tile);
+    }
+  }
+
+  function grid_origin(tx, ty) {
+    const ox = BORDER + tx * TILE;
+    const oy = BORDER + ty * TILE;
+    return [ox, oy];
+  }
+
+  function rebuild_world(center, prev, back_side) {
+    empty_world();
+    tile_positions.clear();
+
+    // place center at (1,1)
+    const [cx, cy] = grid_origin(1,1);
+    build_tile_at(cx, cy, center);
+    tile_positions.set(center, [cx, cy]);
+
+    // place previous at the back side
+    if (prev && back_side !== null && back_side !== undefined) {
+      const tx = 1 + DX[back_side];
+      const ty = 1 + DY[back_side];
+      if (0 <= tx && tx < GRID_SIDE && 0 <= ty && ty < GRID_SIDE) {
+        const [ox, oy] = grid_origin(tx, ty);
+        build_tile_at(ox, oy, prev);
+        tile_positions.set(prev, [ox, oy]);
+      }
+    }
+
+    // place current neighbors
+    for (const [side, neigh] of center.neighbors.entries()) {
+      const tx = 1 + DX[side];
+      const ty = 1 + DY[side];
+      if (0 <= tx && tx < GRID_SIDE && 0 <= ty && ty < GRID_SIDE) {
+        const [ox, oy] = grid_origin(tx, ty);
+        build_tile_at(ox, oy, neigh);
+        tile_positions.set(neigh, [ox, oy]);
+      }
+    }
+  }
+
+  function generate_neighbors_for_center(center, back_side) {
+    center.neighbors.clear();
+    for (const side of center.open_sides) {
+      if (back_side !== null && back_side !== undefined && side === back_side) continue;
+      const neigh = generate_tile(opposite(side));
+      center.neighbors.set(side, neigh);
+    }
+  }
+
+  function back_side_of_current() {
+    if (!prev_tile) return null;
+    const c = tile_positions.get(current_tile);
+    const p = tile_positions.get(prev_tile);
+    if (!c || !p) return null;
+    const [cox, coy] = c;
+    const [pox, poy] = p;
+    const dx = ((pox - cox) / TILE) | 0;
+    const dy = ((poy - coy) / TILE) | 0;
+    if (dx === 0 && dy === -1) return 0;
+    if (dx === 1 && dy === 0) return 1;
+    if (dx === 0 && dy === 1) return 2;
+    if (dx === -1 && dy === 0) return 3;
+    return null;
+  }
+
+  function can_move(nx, ny) {
+    const xi = nx | 0;
+    const yi = ny | 0;
+    if (yi < 0 || yi >= WORLD_H || xi < 0 || xi >= WORLD_W) return false;
+    return WORLD[yi][xi] === 0;
+  }
+
+  function which_tile_contains(x, y) {
+    for (const [t, origin] of tile_positions.entries()) {
+      const [ox, oy] = origin;
+      if (ox < x && x < ox + TILE - 1 && oy < y && y < oy + TILE - 1) {
+        if (t === current_tile) return [t, null];
+        const [cox, coy] = tile_positions.get(current_tile);
+        const dx = ((ox - cox) / TILE) | 0;
+        const dy = ((oy - coy) / TILE) | 0;
+        let d = null;
+        if (dx === 0 && dy === -1) d = 0;
+        else if (dx === 1 && dy === 0) d = 1;
+        else if (dx === 0 && dy === 1) d = 2;
+        else if (dx === -1 && dy === 0) d = 3;
+        return [t, d];
+      }
+    }
+    return [null, null];
+  }
+
+  function enter_neighbor(direction) {
+    const back_dir = back_side_of_current();
+    let next_tile;
+    if (direction === back_dir && prev_tile) {
+      next_tile = prev_tile;
+    } else {
+      next_tile = current_tile.neighbors.get(direction);
+      if (!next_tile) return;
+    }
+    const old_pos = tile_positions.get(next_tile);
+    const [old_ox, old_oy] = old_pos;
+
+    const old_center = current_tile;
+    prev_tile = old_center;
+
+    const arrived_from = opposite(direction);
+    generate_neighbors_for_center(next_tile, arrived_from);
+    rebuild_world(next_tile, prev_tile, arrived_from);
+
+    const [new_ox, new_oy] = tile_positions.get(next_tile);
+    posX = posX - old_ox + new_ox;
+    posY = posY - old_oy + new_oy;
+
+    current_tile = next_tile;
+  }
+
+  function ensure_neighbors_visible() {
+    const [t, d] = which_tile_contains(posX, posY);
+    if (t && t !== current_tile && d !== null) enter_neighbor(d);
+  }
+
+  function start_new_run() {
+    current_tile = generate_tile(3); // start as if you came from West
+    current_tile.kind = 'room3';
+    current_tile.open_sides = new Set([0,1,2,3]);
+    generate_neighbors_for_center(current_tile, 3);
+
+    prev_tile = null;
+    rebuild_world(current_tile, prev_tile, null);
+
+    const [ox, oy] = tile_positions.get(current_tile);
+    posX = ox + TILE * 0.5;
+    posY = oy + TILE * 0.5;
+    dirX = 1.0; dirY = 0.0;
+    planeX = 0.0; planeY = 0.66;
+  }
+
+  // ---------------- Input ----------------
+  const keys = new Set();
+  window.addEventListener('keydown', (e) => {
+    keys.add(e.code);
+    if (e.code === 'KeyR') start_new_run();
+  });
+  window.addEventListener('keyup', (e) => keys.delete(e.code));
+
+  // ---------------- Rendering ----------------
+  function fillRectColor(x, y, w, h, rgb) {
+    ctx.fillStyle = `rgb(${rgb[0]},${rgb[1]},${rgb[2]})`;
+    ctx.fillRect(x, y, w, h);
+  }
+
+  function loop() {
+    const now = performance.now();
+    const dt = Math.min(0.05, (now - loop.lastNow) / 1000 || 0.016);
+    loop.lastNow = now;
+
+    // Rotation
+    let rot = 0.0;
+    if (keys.has('KeyD') || keys.has('ArrowRight')) rot += ROT_SPEED * dt * 3;
+    if (keys.has('KeyA') || keys.has('ArrowLeft'))  rot -= ROT_SPEED * dt * 3;
+    if (rot !== 0.0) {
+      const cos = Math.cos(rot), sin = Math.sin(rot);
+      const oldDirX = dirX;
+      dirX = dirX * cos - dirY * sin;
+      dirY = oldDirX * sin + dirY * cos;
+      const oldPlaneX = planeX;
+      planeX = planeX * cos - planeY * sin;
+      planeY = oldPlaneX * sin + planeY * cos;
+    }
+
+    // Movement
+    const move = MOVE_SPEED * dt * 3;
+    if (keys.has('KeyW')) {
+      const nx = posX + dirX * move, ny = posY + dirY * move;
+      if (can_move(nx, posY)) posX = nx;
+      if (can_move(posX, ny)) posY = ny;
+    }
+    if (keys.has('KeyS')) {
+      const nx = posX - dirX * move, ny = posY - dirY * move;
+      if (can_move(nx, posY)) posX = nx;
+      if (can_move(posX, ny)) posY = ny;
+    }
+
+    ensure_neighbors_visible();
+
+    // Clear sky & floor
+    fillRectColor(0, 0, W, HALF_H, SKY);
+    fillRectColor(0, HALF_H, W, HALF_H, FLOOR);
+
+    // Raycasting per column
+    for (let x=0; x<W; x++) {
+      const cameraX = 2 * x / W - 1;
+      const rayDirX = dirX + planeX * cameraX;
+      const rayDirY = dirY + planeY * cameraX;
+
+      let mapX = posX | 0;
+      let mapY = posY | 0;
+
+      const INF = 1e30;
+      const deltaDistX = rayDirX !== 0 ? Math.abs(1.0 / rayDirX) : INF;
+      const deltaDistY = rayDirY !== 0 ? Math.abs(1.0 / rayDirY) : INF;
+
+      let stepX, stepY, sideDistX, sideDistY;
+      if (rayDirX < 0) { stepX = -1; sideDistX = (posX - mapX) * deltaDistX; }
+      else { stepX = 1; sideDistX = (mapX + 1.0 - posX) * deltaDistX; }
+      if (rayDirY < 0) { stepY = -1; sideDistY = (posY - mapY) * deltaDistY; }
+      else { stepY = 1; sideDistY = (mapY + 1.0 - posY) * deltaDistY; }
+
+      let hit = false; let side = 0; let tile_id = 0;
+      let guard = 0;
+      while (!hit && guard++ < 4096) {
+        if (sideDistX < sideDistY) { sideDistX += deltaDistX; mapX += stepX; side = 0; }
+        else { sideDistY += deltaDistY; mapY += stepY; side = 1; }
+        if (mapY < 0 || mapY >= WORLD_H || mapX < 0 || mapX >= WORLD_W) { hit = true; tile_id = BOUNDARY_ID; break; }
+        tile_id = WORLD[mapY][mapX];
+        if (tile_id !== 0) hit = true;
+      }
+
+      let perpWallDist;
+      if (side === 0) perpWallDist = (mapX - posX + (1 - stepX) / 2.0) / (rayDirX || 1e-9);
+      else perpWallDist = (mapY - posY + (1 - stepY) / 2.0) / (rayDirY || 1e-9);
+      if (!(perpWallDist > 0)) perpWallDist = 1e-6;
+
+      const lineHeight = (H / perpWallDist) | 0;
+      const drawStart = Math.max(0, ((-lineHeight / 2 + HALF_H) | 0));
+      const drawEnd = Math.min(H - 1, ((lineHeight / 2 + HALF_H) | 0));
+
+      let base = WALL_COLOR.get(tile_id) || [255,255,255];
+      if (side === 1) base = [(base[0]*0.75)|0, (base[1]*0.75)|0, (base[2]*0.75)|0];
+      const shade = Math.max(0.4, Math.min(1.0, 2.0 / (perpWallDist + 0.5)));
+      const color = [(base[0]*shade)|0, (base[1]*shade)|0, (base[2]*shade)|0];
+
+      // draw 1px vertical slice
+      ctx.fillStyle = `rgb(${color[0]},${color[1]},${color[2]})`;
+      ctx.fillRect(x, drawStart, 1, drawEnd - drawStart + 1);
+    }
+
+    // HUD
+    const hud = document.getElementById('hud');
+    hud.textContent = `${current_tile?.label || ''}`;
+
+    requestAnimationFrame(loop);
+  }
+  loop.lastNow = performance.now();
+
+  function init() {
+    start_new_run();
+    // run at fixed internal resolution
+    W = canvas.width; H = canvas.height; HALF_H = (H/2)|0;
+    requestAnimationFrame(loop);
+  }
+
+  init();
+  </script>
 </body>
 </html>
