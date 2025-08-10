@@ -10,12 +10,32 @@
     #hud { position: fixed; left: 12px; top: 10px; font-size: 14px; opacity: 0.9; user-select: none; }
     #help { position: fixed; left: 12px; top: 30px; font-size: 12px; color: #bfbfbf; opacity: 0.9; user-select: none; }
 
-    /* --- Mobile touch UI (added) --- */
-    #touch-ui { position: fixed; inset: 0; pointer-events: none; }
+    /* Kill counter (top-right) */
+    #kills {
+      position: fixed; right: 12px; top: 10px;
+      background: rgba(60,60,60,0.85);
+      color: #00ff63; font-weight: 700; font-size: 14px;
+      padding: 4px 8px; border-radius: 6px; user-select: none;
+    }
+
+    /* --- Mobile touch UI --- */
+    #touch-ui { 
+        position: fixed; 
+        inset: 0; 
+        pointer-events: none;
+        display: none; /* Hide by default */
+    }
+
+    /* Only show touch UI on mobile devices */
+    @media (hover: none) and (pointer: coarse) {
+        #touch-ui {
+            display: block;
+        }
+    }
+
     #dpad { position: fixed; left: 3vw; bottom: 4vh; width: 28vw; height: 28vw; max-width: 220px; max-height: 220px; pointer-events: auto; }
     .dpad-btn { position: absolute; width: 34%; height: 34%; background: rgba(128,128,128,0.2); border: 2px solid rgba(200,200,200,0.4); border-radius: 14px; color: #fff; font-size: clamp(16px, 6vw, 26px); display: flex; align-items: center; justify-content: center; user-select: none; -webkit-user-select: none; touch-action: none; }
     .dpad-btn:active { background: rgba(160,160,160,0.28); }
-    /* position the four buttons in a cross */
     #btn-up    { left: 33%; top: 3%; }
     #btn-down  { left: 33%; bottom: 3%; }
     #btn-left  { top: 33%; left: 3%; }
@@ -23,7 +43,6 @@
 
     #shoot-btn { position: fixed; right: 3vw; bottom: 6vh; width: 18vw; height: 18vw; max-width: 160px; max-height: 160px; border-radius: 50%; background: rgba(0,255,0,0.2); border: 2px solid rgba(140,255,140,0.35); pointer-events: auto; user-select: none; -webkit-user-select: none; touch-action: none; }
     #shoot-btn:active { background: rgba(0,255,0,0.28); }
-    /* Hide focus rings for touch */
     .dpad-btn, #shoot-btn { outline: none; }
   </style>
 </head>
@@ -31,10 +50,12 @@
   <canvas id="canvas" width="960" height="600"></canvas>
   <div id="hud"></div>
   <div id="help">Move: W/S, Look: A/D or ←/→, Reset: R</div>
+  <div id="kills">0</div>
+
   <script>
   // ------------------------------------------------------------
   // Infinite (no-global-memory) Zelda-style labyrinth raycaster (Web)
-  // + Mobile touch controls: gray D-pad (left), green shoot button (right)
+  // Now with room-bound enemies, kill count, and game-over reset.
   // ------------------------------------------------------------
 
   // ---------------- Canvas & timing ----------------
@@ -43,29 +64,27 @@
   let W = canvas.width;
   let H = canvas.height;
   let HALF_H = (H / 2) | 0;
-
   ctx.imageSmoothingEnabled = false;
 
-  // --- Mobile detection (added) ---
-  const MOBILE = /Mobi|Android|iPhone|iPad|iPod|Windows Phone|webOS/i.test(navigator.userAgent) || (navigator.maxTouchPoints && navigator.maxTouchPoints > 1);
+  // --- Mobile detection ---
+  const MOBILE =
+    /Mobi|Android|iPhone|iPad|iPod|Windows Phone|webOS/i.test(navigator.userAgent) ||
+    (navigator.maxTouchPoints && navigator.maxTouchPoints > 1);
 
-  // Update help text if on mobile
   if (MOBILE) {
     const help = document.getElementById('help');
     help.textContent = 'Touch: D-pad to move/turn, green button to shoot. (Desktop: W/S, A/D or ←/→, R to reset)';
   }
 
-  // --- Touch control state (added) ---
+  // --- Touch control state ---
   const touchFlags = { fwd:false, back:false, left:false, right:false };
 
   function createTouchUI() {
     const ui = document.createElement('div');
     ui.id = 'touch-ui';
 
-    // D-pad container (visual area is created by the 4 buttons)
     const dpad = document.createElement('div');
     dpad.id = 'dpad';
-
     const makeBtn = (id, label, onDown, onUp) => {
       const b = document.createElement('button');
       b.id = id; b.className = 'dpad-btn'; b.textContent = label; b.setAttribute('aria-label', id);
@@ -76,165 +95,82 @@
       b.addEventListener('touchcancel', up, { passive:false });
       return b;
     };
-
     dpad.appendChild(makeBtn('btn-up',    '▲', () => touchFlags.fwd  = true,  () => touchFlags.fwd  = false));
     dpad.appendChild(makeBtn('btn-down',  '▼', () => touchFlags.back = true,  () => touchFlags.back = false));
     dpad.appendChild(makeBtn('btn-left',  '◄', () => touchFlags.left = true,  () => touchFlags.left = false));
     dpad.appendChild(makeBtn('btn-right', '►', () => touchFlags.right= true,  () => touchFlags.right= false));
 
-    // Shoot button
     const shoot = document.createElement('button');
     shoot.id = 'shoot-btn'; shoot.setAttribute('aria-label', 'Shoot');
-    const shootOnce = (e) => { e.preventDefault(); spawnShot(); };
-    shoot.addEventListener('touchstart', shootOnce, { passive:false });
+    shoot.addEventListener('touchstart', (e) => { e.preventDefault(); spawnShot(); }, { passive:false });
 
     ui.appendChild(dpad);
     ui.appendChild(shoot);
     document.body.appendChild(ui);
-
-    // Reduce accidental pull-to-refresh / long-press behavior
     window.addEventListener('contextmenu', (e) => e.preventDefault());
   }
-
   if (MOBILE) createTouchUI();
 
   // --- Blaster overlay (HUD) ---
   const blasterImg = new Image();
   blasterImg.src = 'blaster.png';
-
   let BLASTER_SCALE = 5.0;
-
   const SWAY_DUR   = 0.35;
   const SWAY_AMP_X = 18;
   const SWAY_AMP_Y = 12;
-
   const BLASTER_BLEED_X = SWAY_AMP_X + 6;
   const BLASTER_BLEED_Y = 6;
-
-  let swayClock = 0;
-  let lastYawSign = 0;
-  let lastBlasterRect = null;
+  let swayClock = 0, lastYawSign = 0, lastBlasterRect = null;
 
   function drawBlaster(turning, moving, yawSign, clock) {
     if (!blasterImg.complete) return;
     const u = ((clock % SWAY_DUR) / SWAY_DUR);
     const parab = (turning || moving) ? (4 * u * (1 - u)) : 0;
-
     const dx = -yawSign * SWAY_AMP_X * parab;
     const dy = (turning || moving ? 1 : 0) * SWAY_AMP_Y * parab;
-
     const w = blasterImg.width  * BLASTER_SCALE;
     const h = blasterImg.height * BLASTER_SCALE;
-
     const baseX = W - w + BLASTER_BLEED_X;
     const baseY = H - h + BLASTER_BLEED_Y;
-
-    const x = baseX + dx;
-    const y = baseY + dy;
-
+    const x = baseX + dx, y = baseY + dy;
     lastBlasterRect = { x, y, w, h };
     ctx.drawImage(blasterImg, x, y, w, h);
   }
 
-  // --------------- 3D projectiles (sprite-based) ---------------
-  const shotImg = new Image();
-  shotImg.src = 'blast.png';
-
+  // --------------- Projectiles (sprite-based) ---------------
+  const shotImg = new Image(); shotImg.src = 'blast.png';
   const shots = [];
-  const SHOT_SPEED = 18.0;      // tiles / second
-  const SHOT_TTL   = 1.2;       // seconds max lifetime
-  const SHOT_SCALE = 0.5;       // ✱ CHANGED: 50% size
+  const SHOT_SPEED = 18.0;
+  const SHOT_TTL   = 1.2;
+  const SHOT_SCALE = 0.5; // half size
 
   function spawnShot() {
-    // muzzle offset: a bit forward, a bit to the right of camera
-    const forward = 0.80;
-    const rightOff = 0.2;
-
-    // ✱ CHANGED: ensure "right" is truly to the player's right on screen
-    const rx = -dirY, ry = dirX;
-
+    const forward = 0.80, rightOff = 0.2;
+    const rx = -dirY, ry = dirX; // right vector
     const sx = posX + dirX * forward + rx * rightOff;
     const sy = posY + dirY * forward + ry * rightOff;
-
-    shots.push({
-      x: sx, y: sy,
-      vx: dirX * SHOT_SPEED,
-      vy: dirY * SHOT_SPEED,
-      t: 0
-    });
+    shots.push({ x: sx, y: sy, vx: dirX * SHOT_SPEED, vy: dirY * SHOT_SPEED, t: 0 });
   }
-
-  window.addEventListener('mousedown', (e) => {
-    if (e.button === 0) spawnShot();
-  });
+  window.addEventListener('mousedown', (e) => { if (e.button === 0) spawnShot(); });
 
   function moveShots(dt) {
     for (let i = shots.length - 1; i >= 0; i--) {
       const s = shots[i];
       let remain = dt;
       const STEP = 0.025;
-
       while (remain > 0) {
         const d = Math.min(STEP, remain);
-        const nx = s.x + s.vx * d;
-        const ny = s.y + s.vy * d;
-
+        const nx = s.x + s.vx * d, ny = s.y + s.vy * d;
         if (!can_move(nx, ny)) { shots.splice(i, 1); break; }
-
         s.x = nx; s.y = ny; s.t += d; remain -= d;
         if (s.t > SHOT_TTL) { shots.splice(i, 1); break; }
       }
     }
   }
 
-  let zBuf = null;
-
-  function drawShots(zBuf) {
-    if (!shotImg.complete) return;
-
-    const order = shots
-      .map((s, i) => ({ i, d: (s.x - posX) ** 2 + (s.y - posY) ** 2 }))
-      .sort((a, b) => b.d - a.d);
-
-    for (const o of order) {
-      const s = shots[o.i];
-
-      const relX = s.x - posX;
-      const relY = s.y - posY;
-      const invDet = 1.0 / (planeX * dirY - dirX * planeY);
-      const transX = invDet * ( dirY * relX - dirX * relY);
-      const transY = invDet * (-planeY * relX + planeX * relY);
-      if (transY <= 0.0001) continue;
-
-      // ✱ CHANGED: scale down sprite
-      const screenX = (W / 2) * (1 + transX / transY);
-      const spriteH = Math.abs((H / transY) * SHOT_SCALE);
-      const spriteW = spriteH;
-
-      const drawStartY = Math.max(0, ((-spriteH / 2 + HALF_H) | 0));
-      const drawEndY   = Math.min(H - 1, ((spriteH / 2 + HALF_H) | 0));
-      const drawStartX = Math.max(0, ((-spriteW / 2 + screenX) | 0));
-      const drawEndX   = Math.min(W - 1, ((spriteW / 2 + screenX) | 0));
-
-      for (let stripe = drawStartX; stripe <= drawEndX; stripe++) {
-        if (transY < zBuf[stripe]) {
-          const u = (stripe - (-spriteW / 2 + screenX)) / spriteW;
-          const texX = Math.max(0, Math.min(shotImg.width - 1, Math.floor(u * shotImg.width)));
-          ctx.drawImage(
-            shotImg,
-            texX, 0, 1, shotImg.height,
-            stripe, drawStartY, 1, drawEndY - drawStartY + 1
-          );
-        }
-      }
-    }
-  }
-
-  // ✱ CHANGED: scale canvas to the largest possible size inside the window
-  // while preserving the 960×600 internal resolution & aspect ratio.
+  // ✱ Preserve internal res but stretch to biggest window area
   function resizeToWindow() {
-    const targetW = canvas.width;
-    const targetH = canvas.height;
+    const targetW = canvas.width, targetH = canvas.height;
     const scale = Math.min(window.innerWidth / targetW, window.innerHeight / targetH);
     canvas.style.width  = Math.round(targetW * scale) + 'px';
     canvas.style.height = Math.round(targetH * scale) + 'px';
@@ -243,13 +179,11 @@
   resizeToWindow();
 
   // Colors
-  const SKY = [0,0,0];
-  const FLOOR = [0,0,0];
+  const SKY = [0,0,0], FLOOR = [0,0,0];
 
   // ---------------- Raycaster world ----------------
   let WORLD = [];
-  let WORLD_W = 0;
-  let WORLD_H = 0;
+  let WORLD_W = 0, WORLD_H = 0;
 
   const WALL_COLOR = new Map(); // id -> [r,g,b]
   const BOUNDARY_ID = 7;
@@ -259,25 +193,17 @@
   let posX = 8.0, posY = 8.0;
   let dirX = 1.0, dirY = 0.0;
   let planeX = 0.0, planeY = 0.66;
-  const MOVE_SPEED = 3.2;
-  const ROT_SPEED = 1.0;
+  const MOVE_SPEED = 3.2, ROT_SPEED = 1.0;
 
   // Tile/grid settings
-  const TILE = 18;
-  const DOOR_W = 4;
-  const PATH_W = 3;
-  const BORDER = 2;
+  const TILE = 18, DOOR_W = 4, PATH_W = 3, BORDER = 2;
   const GRID_SIDE = 3; // 3x3 grid: center + neighbors
   WORLD_W = BORDER * 2 + TILE * GRID_SIDE;
-  WORLD_H = WORLD_W; // square
+  WORLD_H = WORLD_W;
 
   // Directions: 0=N,1=E,2=S,3=W
-  const DX = [0, 1, 0, -1];
-  const DY = [-1, 0, 1, 0];
-  const DIR_NAME = ['N','E','S','W'];
-  const left_of = d => (d + 3) % 4;
-  const right_of = d => (d + 1) % 4;
-  const opposite = d => (d + 2) % 4;
+  const DX = [0, 1, 0, -1], DY = [-1, 0, 1, 0];
+  const left_of = d => (d + 3) % 4, right_of = d => (d + 1) % 4, opposite = d => (d + 2) % 4;
 
   class Tile {
     constructor(orient_dir, kind, open_sides, wall_id, color, label) {
@@ -288,11 +214,12 @@
       this.color = color;
       this.label = label;
       this.neighbors = new Map();
+      // Enemy lifecycle for this tile: undefined -> (alive) -> killed/spent
+      this.enemyState = undefined; // 'alive' | 'killed' | 'spent'
     }
   }
 
-  let current_tile = null;
-  let prev_tile = null;
+  let current_tile = null, prev_tile = null;
   const tile_positions = new Map();
   let wall_id_counter = 10;
 
@@ -313,13 +240,7 @@
     }
     return [ (r*255)|0, (g*255)|0, (b*255)|0 ];
   }
-
-  function rand_rainbow() {
-    const h = Math.random();
-    const s = 0.9;
-    const v = 1.0;
-    return hsvToRgb(h, s, v);
-  }
+  const rand_rainbow = () => { const h = Math.random(), s = 0.9, v = 1.0; return hsvToRgb(h,s,v); };
 
   function next_wall_id_with_color() {
     const wid = wall_id_counter++;
@@ -331,14 +252,9 @@
   function generate_tile(orient_dir) {
     const kinds = ['room3', 'dead', 'straight', 'Lleft', 'Lright'];
     const weights = [0.30, 0.12, 0.28, 0.15, 0.15];
-    let r = Math.random();
-    let acc = 0;
-    let kind = kinds[0];
+    let r = Math.random(), acc = 0, kind = kinds[0];
     for (let i=0;i<kinds.length;i++) { acc += weights[i]; if (r <= acc) { kind = kinds[i]; break; } }
-
-    const forward = opposite(orient_dir);
-    const L = left_of(orient_dir);
-    const R = right_of(orient_dir);
+    const forward = opposite(orient_dir), L = left_of(orient_dir), R = right_of(orient_dir);
 
     let open_sides, exits_label;
     if (kind === 'room3') { open_sides = new Set([orient_dir, forward, L, R]); exits_label = '3 exits'; }
@@ -357,23 +273,13 @@
     WORLD_W = BORDER * 2 + TILE * GRID_SIDE;
     WORLD_H = WORLD_W;
     WORLD = new Array(WORLD_H);
-    for (let y=0; y<WORLD_H; y++) {
-      WORLD[y] = new Array(WORLD_W).fill(0);
-    }
-    for (let x=0; x<WORLD_W; x++) {
-      WORLD[0][x] = BOUNDARY_ID;
-      WORLD[WORLD_H-1][x] = BOUNDARY_ID;
-    }
-    for (let y=0; y<WORLD_H; y++) {
-      WORLD[y][0] = BOUNDARY_ID;
-      WORLD[y][WORLD_W-1] = BOUNDARY_ID;
-    }
+    for (let y=0; y<WORLD_H; y++) WORLD[y] = new Array(WORLD_W).fill(0);
+    for (let x=0; x<WORLD_W; x++) { WORLD[0][x] = BOUNDARY_ID; WORLD[WORLD_H-1][x] = BOUNDARY_ID; }
+    for (let y=0; y<WORLD_H; y++) { WORLD[y][0] = BOUNDARY_ID; WORLD[y][WORLD_W-1] = BOUNDARY_ID; }
   }
 
   function carve_door(edge, ox, oy) {
-    const cx = (ox + (TILE/2)|0);
-    const cy = (oy + (TILE/2)|0);
-    const half = (DOOR_W/2)|0;
+    const cx = (ox + (TILE/2)|0), cy = (oy + (TILE/2)|0), half = (DOOR_W/2)|0;
     if (edge === 0) { const y = oy; for (let i=-half; i<=half; i++) WORLD[y][cx + i] = 0; }
     else if (edge === 2) { const y = oy + TILE - 1; for (let i=-half; i<=half; i++) WORLD[y][cx + i] = 0; }
     else if (edge === 1) { const x = ox + TILE - 1; for (let i=-half; i<=half; i++) WORLD[cy + i][x] = 0; }
@@ -381,34 +287,20 @@
   }
 
   function draw_border_box(ox, oy, wid) {
-    for (let x=ox; x<ox+TILE; x++) {
-      WORLD[oy][x] = wid;
-      WORLD[oy + TILE - 1][x] = wid;
-    }
-    for (let y=oy; y<oy+TILE; y++) {
-      WORLD[y][ox] = wid;
-      WORLD[y][ox + TILE - 1] = wid;
-    }
+    for (let x=ox; x<ox+TILE; x++) { WORLD[oy][x] = wid; WORLD[oy + TILE - 1][x] = wid; }
+    for (let y=oy; y<oy+TILE; y++) { WORLD[y][ox] = wid; WORLD[y][ox + TILE - 1] = wid; }
   }
 
   function fill_interior(ox, oy, wid) {
-    for (let y=oy+1; y<oy+TILE-1; y++) {
-      for (let x=ox+1; x<ox+TILE-1; x++) {
-        WORLD[y][x] = wid;
-      }
-    }
+    for (let y=oy+1; y<oy+TILE-1; y++) for (let x=ox+1; x<ox+TILE-1; x++) WORLD[y][x] = wid;
   }
 
   function carve_rect(x0, y0, x1, y1) {
-    if (x0 > x1) { let t=x0; x0=x1; x1=t; }
-    if (y0 > y1) { let t=y0; y0=y1; y1=t; }
+    if (x0 > x1) [x0, x1] = [x1, x0];
+    if (y0 > y1) [y0, y1] = [y1, y0];
     x0 = Math.max(1, x0); y0 = Math.max(1, y0);
     x1 = Math.min(WORLD_W-2, x1); y1 = Math.min(WORLD_H-2, y1);
-    for (let y=y0; y<=y1; y++) {
-      for (let x=x0; x<=x1; x++) {
-        WORLD[y][x] = 0;
-      }
-    }
+    for (let y=y0; y<=y1; y++) for (let x=x0; x<=x1; x++) WORLD[y][x] = 0;
   }
 
   function build_room(ox, oy, tile) {
@@ -419,53 +311,32 @@
   function build_hall_straight(ox, oy, tile) {
     draw_border_box(ox, oy, tile.wall_id);
     fill_interior(ox, oy, tile.wall_id);
-    const cx = (ox + (TILE/2)|0);
-    const cy = (oy + (TILE/2)|0);
-    if (tile.orient_dir === 0 || tile.orient_dir === 2) {
-      carve_rect(cx - (PATH_W>>1), oy+1, cx + (PATH_W>>1), oy + TILE - 2);
-    } else {
-      carve_rect(ox+1, cy - (PATH_W>>1), ox + TILE - 2, cy + (PATH_W>>1));
-    }
+    const cx = (ox + (TILE/2)|0), cy = (oy + (TILE/2)|0);
+    if (tile.orient_dir === 0 || tile.orient_dir === 2) carve_rect(cx - (PATH_W>>1), oy+1, cx + (PATH_W>>1), oy + TILE - 2);
+    else carve_rect(ox+1, cy - (PATH_W>>1), ox + TILE - 2, cy + (PATH_W>>1));
     for (const side of tile.open_sides) carve_door(side, ox, oy);
   }
 
   function build_hall_L(ox, oy, tile, turn_to) {
     draw_border_box(ox, oy, tile.wall_id);
     fill_interior(ox, oy, tile.wall_id);
-    const cx = (ox + (TILE/2)|0);
-    const cy = (oy + (TILE/2)|0);
-    if (tile.orient_dir === 0 || tile.orient_dir === 2) {
-      carve_rect(cx - (PATH_W>>1), oy+1, cx + (PATH_W>>1), cy);
-    } else {
-      carve_rect(ox+1, cy - (PATH_W>>1), cx, cy + (PATH_W>>1));
-    }
-    if (turn_to === 0 || turn_to === 2) {
-      carve_rect(cx - (PATH_W>>1), cy, cx + (PATH_W>>1), oy + TILE - 2);
-    } else {
-      carve_rect(cx, cy - (PATH_W>>1), ox + TILE - 2, cy + (PATH_W>>1));
-    }
+    const cx = (ox + (TILE/2)|0), cy = (oy + (TILE/2)|0);
+    if (tile.orient_dir === 0 || tile.orient_dir === 2) carve_rect(cx - (PATH_W>>1), oy+1, cx + (PATH_W>>1), cy);
+    else carve_rect(ox+1, cy - (PATH_W>>1), cx, cy + (PATH_W>>1));
+    if (turn_to === 0 || turn_to === 2) carve_rect(cx - (PATH_W>>1), cy, cx + (PATH_W>>1), oy + TILE - 2);
+    else carve_rect(cx, cy - (PATH_W>>1), ox + TILE - 2, cy + (PATH_W>>1));
     for (const side of tile.open_sides) carve_door(side, ox, oy);
   }
 
   function build_tile_at(ox, oy, tile) {
-    if (tile.kind === 'room3' || tile.kind === 'dead') {
-      build_room(ox, oy, tile);
-    } else if (tile.kind === 'straight') {
-      build_hall_straight(ox, oy, tile);
-    } else if (tile.kind === 'Lleft') {
-      build_hall_L(ox, oy, tile, left_of(tile.orient_dir));
-    } else if (tile.kind === 'Lright') {
-      build_hall_L(ox, oy, tile, right_of(tile.orient_dir));
-    } else {
-      build_room(ox, oy, tile);
-    }
+    if (tile.kind === 'room3' || tile.kind === 'dead') build_room(ox, oy, tile);
+    else if (tile.kind === 'straight') build_hall_straight(ox, oy, tile);
+    else if (tile.kind === 'Lleft') build_hall_L(ox, oy, tile, left_of(tile.orient_dir));
+    else if (tile.kind === 'Lright') build_hall_L(ox, oy, tile, right_of(tile.orient_dir));
+    else build_room(ox, oy, tile);
   }
 
-  function grid_origin(tx, ty) {
-    const ox = BORDER + tx * TILE;
-    const oy = BORDER + ty * TILE;
-    return [ox, oy];
-  }
+  function grid_origin(tx, ty) { return [BORDER + tx * TILE, BORDER + ty * TILE]; }
 
   function rebuild_world(center, prev, back_side) {
     empty_world();
@@ -476,18 +347,15 @@
     tile_positions.set(center, [cx, cy]);
 
     if (prev && back_side !== null && back_side !== undefined) {
-      const tx = 1 + DX[back_side];
-      const ty = 1 + DY[back_side];
+      const tx = 1 + DX[back_side], ty = 1 + DY[back_side];
       if (0 <= tx && tx < GRID_SIDE && 0 <= ty && ty < GRID_SIDE) {
         const [ox, oy] = grid_origin(tx, ty);
         build_tile_at(ox, oy, prev);
         tile_positions.set(prev, [ox, oy]);
       }
     }
-
     for (const [side, neigh] of center.neighbors.entries()) {
-      const tx = 1 + DX[side];
-      const ty = 1 + DY[side];
+      const tx = 1 + DX[side], ty = 1 + DY[side];
       if (0 <= tx && tx < GRID_SIDE && 0 <= ty && ty < GRID_SIDE) {
         const [ox, oy] = grid_origin(tx, ty);
         build_tile_at(ox, oy, neigh);
@@ -507,13 +375,10 @@
 
   function back_side_of_current() {
     if (!prev_tile) return null;
-    const c = tile_positions.get(current_tile);
-    const p = tile_positions.get(prev_tile);
+    const c = tile_positions.get(current_tile), p = tile_positions.get(prev_tile);
     if (!c || !p) return null;
-    const [cox, coy] = c;
-    const [pox, poy] = p;
-    const dx = ((pox - cox) / TILE) | 0;
-    const dy = ((poy - coy) / TILE) | 0;
+    const [cox, coy] = c, [pox, poy] = p;
+    const dx = ((pox - cox) / TILE) | 0, dy = ((poy - coy) / TILE) | 0;
     if (dx === 0 && dy === -1) return 0;
     if (dx === 1 && dy === 0) return 1;
     if (dx === 0 && dy === 1) return 2;
@@ -522,8 +387,7 @@
   }
 
   function can_move(nx, ny) {
-    const xi = nx | 0;
-    const yi = ny | 0;
+    const xi = nx | 0, yi = ny | 0;
     if (yi < 0 || yi >= WORLD_H || xi < 0 || xi >= WORLD_W) return false;
     return WORLD[yi][xi] === 0;
   }
@@ -534,8 +398,7 @@
       if (ox < x && x < ox + TILE - 1 && oy < y && y < oy + TILE - 1) {
         if (t === current_tile) return [t, null];
         const [cox, coy] = tile_positions.get(current_tile);
-        const dx = ((ox - cox) / TILE) | 0;
-        const dy = ((oy - coy) / TILE) | 0;
+        const dx = ((ox - cox) / TILE) | 0, dy = ((oy - coy) / TILE) | 0;
         let d = null;
         if (dx === 0 && dy === -1) d = 0;
         else if (dx === 1 && dy === 0) d = 1;
@@ -547,12 +410,116 @@
     return [null, null];
   }
 
+  // ---------- Enemies ----------
+  const enemyImg = new Image(); enemyImg.src = 'enemy.png';
+  const ENEMY_SPEED = 1.6;
+  const ENEMY_RADIUS = 0.35;
+  const PLAYER_RADIUS = 0.35;
+  const ENEMY_SCALE = 0.9; // sprite height relative to wall scale
+
+  let enemy = null; // { tile, x, y, anim, flip }
+  let kills = 0;
+  const killsBox = document.getElementById('kills');
+  const updateKillsUI = () => killsBox.textContent = String(kills);
+
+  const isRoom = (tile) => tile && (tile.kind === 'room3' || tile.kind === 'dead' || tile.kind === 'start');
+
+function maybeSpawnEnemyFor(tile) {
+  if (!isRoom(tile)) return;
+  if (tile.isStart) return; // never spawn in the first room
+  if (tile.enemyState === 'killed' || tile.enemyState === 'spent' || tile.enemyState === 'alive') return;
+  tile.enemyState = 'alive';
+  const [ox, oy] = tile_positions.get(tile);
+  const ex = ox + TILE * 0.5, ey = oy + TILE * 0.5;
+  enemy = { tile, x: ex, y: ey, anim: 0, flip: false };
+}
+
+  function killEnemy(e) {
+    if (!e) return;
+    e.tile.enemyState = 'killed';
+    enemy = null;
+    kills++; updateKillsUI();
+  }
+
+  let gameOverCountdown = -1.0;
+  function triggerGameOver() {
+    gameOverCountdown = 1.2; // seconds to show screen before reset
+  }
+
+  function updateEnemy(dt) {
+    if (!enemy) return;
+
+    // Walk toward player
+    const dx = posX - enemy.x, dy = posY - enemy.y;
+    const dist = Math.hypot(dx, dy);
+    if (dist > 1e-4) {
+      const step = ENEMY_SPEED * dt;
+      const ux = dx / dist, uy = dy / dist;
+      const nx = enemy.x + ux * step, ny = enemy.y + uy * step;
+      if (can_move(nx, enemy.y)) enemy.x = nx;
+      if (can_move(enemy.x, ny)) enemy.y = ny;
+    }
+
+    // Flip back/forth while "walking"
+    enemy.anim += dt;
+    enemy.flip = Math.sin(enemy.anim * 8.0) > 0;
+
+    // Collide with player -> game over
+    if (dist < (PLAYER_RADIUS + ENEMY_RADIUS)) {
+      triggerGameOver();
+    }
+
+    // Collide with a shot -> enemy dies
+    for (let i = shots.length - 1; i >= 0 && enemy; i--) {
+      const s = shots[i];
+      const d2 = (s.x - enemy.x) ** 2 + (s.y - enemy.y) ** 2;
+      if (d2 < (ENEMY_RADIUS * ENEMY_RADIUS)) {
+        shots.splice(i, 1);
+        killEnemy(enemy);
+      }
+    }
+  }
+
+  function drawEnemy(zBuf) {
+    if (!enemy || !enemyImg.complete) return;
+
+    const relX = enemy.x - posX;
+    const relY = enemy.y - posY;
+    const invDet = 1.0 / (planeX * dirY - dirX * planeY);
+    const transX = invDet * ( dirY * relX - dirX * relY);
+    const transY = invDet * (-planeY * relX + planeX * relY);
+    if (transY <= 0.0001) return;
+
+    const screenX = (W / 2) * (1 + transX / transY);
+    const spriteH = Math.abs((H / transY) * ENEMY_SCALE);
+    const aspect = enemyImg.width / enemyImg.height;
+    const spriteW = spriteH * aspect;
+
+    const drawStartY = Math.max(0, ((-spriteH / 2 + HALF_H) | 0));
+    const drawEndY   = Math.min(H - 1, ((spriteH / 2 + HALF_H) | 0));
+    const drawStartX = Math.max(0, ((-spriteW / 2 + screenX) | 0));
+    const drawEndX   = Math.min(W - 1, ((spriteW / 2 + screenX) | 0));
+
+    for (let stripe = drawStartX; stripe <= drawEndX; stripe++) {
+      if (transY < zBuf[stripe]) {
+        // texture u (flip if enemy.flip)
+        const u = (stripe - (-spriteW / 2 + screenX)) / spriteW;
+        const uu = enemy.flip ? (1 - u) : u;
+        const texX = Math.max(0, Math.min(enemyImg.width - 1, Math.floor(uu * enemyImg.width)));
+        ctx.drawImage(
+          enemyImg,
+          texX, 0, 1, enemyImg.height,
+          stripe, drawStartY, 1, drawEndY - drawStartY + 1
+        );
+      }
+    }
+  }
+
   function enter_neighbor(direction) {
     const back_dir = back_side_of_current();
     let next_tile;
-    if (direction === back_dir && prev_tile) {
-      next_tile = prev_tile;
-    } else {
+    if (direction === back_dir && prev_tile) next_tile = prev_tile;
+    else {
       next_tile = current_tile.neighbors.get(direction);
       if (!next_tile) return;
     }
@@ -560,6 +527,13 @@
     const [old_ox, old_oy] = old_pos;
 
     const old_center = current_tile;
+
+    // Despawn enemy tied to the old center without counting as a kill
+    if (enemy && enemy.tile === old_center && old_center.enemyState === 'alive') {
+      old_center.enemyState = 'spent';
+      enemy = null;
+    }
+
     prev_tile = old_center;
 
     const arrived_from = opposite(direction);
@@ -569,12 +543,12 @@
     const [new_ox, new_oy] = tile_positions.get(next_tile);
     posX = posX - old_ox + new_ox;
     posY = posY - old_oy + new_oy;
-    for (const s of shots) {
-      s.x = s.x - old_ox + new_ox;
-      s.y = s.y - old_oy + new_oy;
-    }
+    for (const s of shots) { s.x = s.x - old_ox + new_ox; s.y = s.y - old_oy + new_oy; }
 
     current_tile = next_tile;
+
+    // Spawn enemy for the new center if appropriate
+    maybeSpawnEnemyFor(current_tile);
   }
 
   function ensure_neighbors_visible() {
@@ -582,21 +556,28 @@
     if (t && t !== current_tile && d !== null) enter_neighbor(d);
   }
 
-  function start_new_run() {
-    current_tile = generate_tile(3);
-    current_tile.kind = 'room3';
-    current_tile.open_sides = new Set([0,1,2,3]);
-    generate_neighbors_for_center(current_tile, 3);
+function start_new_run() {
+  kills = 0; updateKillsUI();
+  enemy = null;
 
-    prev_tile = null;
-    rebuild_world(current_tile, prev_tile, null);
+  // Make a special first room: no rear door, no enemy
+  current_tile = generate_tile(3);   // orientation doesn't matter for this override
+  current_tile.kind = 'start';
+  current_tile.open_sides = new Set([1, 0, 2]); // front(E), left(N), right(S); no rear(W)
+  current_tile.isStart = true;
+  current_tile.label = 'start (no rear door)';
 
-    const [ox, oy] = tile_positions.get(current_tile);
-    posX = ox + TILE * 0.5;
-    posY = oy + TILE * 0.5;
-    dirX = 1.0; dirY = 0.0;
-    planeX = 0.0; planeY = 0.66;
-  }
+  generate_neighbors_for_center(current_tile, 3); // also tells generator “don’t make a back neighbor”
+  prev_tile = null;
+  rebuild_world(current_tile, prev_tile, null);
+
+  const [ox, oy] = tile_positions.get(current_tile);
+  posX = ox + TILE * 0.5; posY = oy + TILE * 0.5;
+  dirX = 1.0; dirY = 0.0; planeX = 0.0; planeY = 0.66;
+
+  // Do NOT spawn an enemy in the starting room
+}
+
 
   // ---------------- Input ----------------
   const keys = new Set();
@@ -612,12 +593,62 @@
     ctx.fillRect(x, y, w, h);
   }
 
+  let zBuf = null;
+
+  function drawShots(zBuf) {
+    if (!shotImg.complete) return;
+    const order = shots.map((s, i) => ({ i, d: (s.x - posX) ** 2 + (s.y - posY) ** 2 })).sort((a, b) => b.d - a.d);
+    for (const o of order) {
+      const s = shots[o.i];
+      const relX = s.x - posX, relY = s.y - posY;
+      const invDet = 1.0 / (planeX * dirY - dirX * planeY);
+      const transX = invDet * ( dirY * relX - dirX * relY);
+      const transY = invDet * (-planeY * relX + planeX * relY);
+      if (transY <= 0.0001) continue;
+
+      const screenX = (W / 2) * (1 + transX / transY);
+      const spriteH = Math.abs((H / transY) * SHOT_SCALE);
+      const spriteW = spriteH;
+
+      const drawStartY = Math.max(0, ((-spriteH / 2 + HALF_H) | 0));
+      const drawEndY   = Math.min(H - 1, ((spriteH / 2 + HALF_H) | 0));
+      const drawStartX = Math.max(0, ((-spriteW / 2 + screenX) | 0));
+      const drawEndX   = Math.min(W - 1, ((spriteW / 2 + screenX) | 0));
+
+      for (let stripe = drawStartX; stripe <= drawEndX; stripe++) {
+        if (transY < zBuf[stripe]) {
+          const u = (stripe - (-spriteW / 2 + screenX)) / spriteW;
+          const texX = Math.max(0, Math.min(shotImg.width - 1, Math.floor(u * shotImg.width)));
+          ctx.drawImage(shotImg, texX, 0, 1, shotImg.height, stripe, drawStartY, 1, drawEndY - drawStartY + 1);
+        }
+      }
+    }
+  }
+
   function loop() {
     const now = performance.now();
     const dt = Math.min(0.05, (now - loop.lastNow) / 1000 || 0.016);
     loop.lastNow = now;
 
-    // Rotation (added touch flags)
+    // If game-over, show overlay and countdown to reset
+    if (gameOverCountdown >= 0) {
+      gameOverCountdown -= dt;
+      // draw faint last frame behind overlay by not clearing; then overlay:
+      ctx.fillStyle = 'rgba(0,0,0,0.65)';
+      ctx.fillRect(0, 0, W, H);
+      ctx.fillStyle = '#ff4040';
+      ctx.font = 'bold 44px system-ui, Segoe UI, Roboto, Helvetica, Arial';
+      ctx.textAlign = 'center';
+      ctx.fillText('GAME OVER', W/2, H/2);
+      if (gameOverCountdown <= 0) {
+        start_new_run();
+        gameOverCountdown = -1;
+      }
+      requestAnimationFrame(loop);
+      return;
+    }
+
+    // Rotation (keyboard + touch)
     let rot = 0.0;
     const turnRight = keys.has('KeyD') || keys.has('ArrowRight') || (MOBILE && touchFlags.right);
     const turnLeft  = keys.has('KeyA') || keys.has('ArrowLeft')  || (MOBILE && touchFlags.left);
@@ -633,7 +664,7 @@
       planeY = oldPlaneX * sin + planeY * cos;
     }
 
-    // Movement (added touch flags)
+    // Movement (keyboard + touch)
     const move = MOVE_SPEED * dt * 3;
     const goFwd  = keys.has('KeyW') || (MOBILE && touchFlags.fwd);
     const goBack = keys.has('KeyS') || (MOBILE && touchFlags.back);
@@ -649,20 +680,20 @@
     }
 
     ensure_neighbors_visible();
-
     moveShots(dt);
+    updateEnemy(dt);
 
+    // Sky/floor
     fillRectColor(0, 0, W, HALF_H, SKY);
     fillRectColor(0, HALF_H, W, HALF_H, FLOOR);
 
+    // Walls + zBuffer
     for (let x=0; x<W; x++) {
       const cameraX = 2 * x / W - 1;
       const rayDirX = dirX + planeX * cameraX;
       const rayDirY = dirY + planeY * cameraX;
 
-      let mapX = posX | 0;
-      let mapY = posY | 0;
-
+      let mapX = posX | 0, mapY = posY | 0;
       const INF = 1e30;
       const deltaDistX = rayDirX !== 0 ? Math.abs(1.0 / rayDirX) : INF;
       const deltaDistY = rayDirY !== 0 ? Math.abs(1.0 / rayDirY) : INF;
@@ -673,8 +704,7 @@
       if (rayDirY < 0) { stepY = -1; sideDistY = (posY - mapY) * deltaDistY; }
       else { stepY = 1; sideDistY = (mapY + 1.0 - posY) * deltaDistY; }
 
-      let hit = false; let side = 0; let tile_id = 0;
-      let guard = 0;
+      let hit = false, side = 0, tile_id = 0, guard = 0;
       while (!hit && guard++ < 4096) {
         if (sideDistX < sideDistY) { sideDistX += deltaDistX; mapX += stepX; side = 0; }
         else { sideDistY += deltaDistY; mapY += stepY; side = 1; }
@@ -704,39 +734,32 @@
       zBuf[x] = perpWallDist;
     }
 
+    // Sprites
+    drawEnemy(zBuf);
     drawShots(zBuf);
 
-    const hud = document.getElementById('hud');
-    hud.textContent = `${current_tile?.label || ''}`;
+    // HUD text (tile label)
+    document.getElementById('hud').textContent = `${current_tile?.label || ''}`;
 
+    // Blaster sway
     const turning = (rot !== 0);
-    const moving  = goFwd || goBack;
-
+    const moving  = (keys.has('KeyW') || keys.has('KeyS') || (MOBILE && (touchFlags.fwd || touchFlags.back)));
     let yawSign = 0;
     if (turning) yawSign = rot > 0 ? 1 : -1;
-
-    if (turning || moving) {
-      swayClock += dt;
-      if (yawSign !== 0) lastYawSign = yawSign;
-    } else {
-      swayClock = 0;
-      lastYawSign = 0;
-    }
-
+    if (turning || moving) { swayClock += dt; if (yawSign !== 0) lastYawSign = yawSign; }
+    else { swayClock = 0; lastYawSign = 0; }
     drawBlaster(turning, moving, lastYawSign, swayClock);
 
     requestAnimationFrame(loop);
-
   }
   loop.lastNow = performance.now();
 
   function init() {
-    start_new_run();
     W = canvas.width; H = canvas.height; HALF_H = (H/2)|0;
     zBuf = new Float32Array(W);
+    start_new_run();
     requestAnimationFrame(loop);
   }
-
   init();
   </script>
 </body>
