@@ -85,16 +85,85 @@
 
     const dpad = document.createElement('div');
     dpad.id = 'dpad';
+    
+    // Track active touches
+    let activeTouches = new Map(); // touchId -> {startBtn, startX, startY}
+
     const makeBtn = (id, label, onDown, onUp) => {
       const b = document.createElement('button');
       b.id = id; b.className = 'dpad-btn'; b.textContent = label; b.setAttribute('aria-label', id);
-      const down = (e) => { e.preventDefault(); onDown(); };
-      const up   = (e) => { e.preventDefault(); onUp(); };
+      
+      const down = (e) => { 
+        e.preventDefault(); 
+        const touch = e.touches[0];
+        activeTouches.set(touch.identifier, {
+          startBtn: id,
+          startX: touch.clientX,
+          startY: touch.clientY
+        });
+        onDown(); 
+      };
+      
+      const up = (e) => { 
+        e.preventDefault();
+        // Clear all flags when touch ends
+        touchFlags.fwd = false;
+        touchFlags.back = false;
+        touchFlags.left = false;
+        touchFlags.right = false;
+        activeTouches.clear();
+      };
+
       b.addEventListener('touchstart', down, { passive:false });
-      b.addEventListener('touchend', up,   { passive:false });
+      b.addEventListener('touchend', up, { passive:false });
       b.addEventListener('touchcancel', up, { passive:false });
       return b;
     };
+
+    // Add touch move handler to the d-pad
+    dpad.addEventListener('touchmove', (e) => {
+      e.preventDefault();
+      for (let touch of e.changedTouches) {
+        const trackInfo = activeTouches.get(touch.identifier);
+        if (!trackInfo) continue;
+
+        // Calculate how far we've moved from start position
+        const dx = touch.clientX - trackInfo.startX;
+        const dy = touch.clientY - trackInfo.startY;
+        const THRESHOLD = 20; // pixels to trigger diagonal
+
+        // Reset all flags
+        touchFlags.fwd = false;
+        touchFlags.back = false;
+        touchFlags.left = false;
+        touchFlags.right = false;
+
+        // Set appropriate flags based on original button and movement
+        switch(trackInfo.startBtn) {
+          case 'btn-up':
+            touchFlags.fwd = true;
+            if (dx > THRESHOLD) touchFlags.right = true;
+            if (dx < -THRESHOLD) touchFlags.left = true;
+            break;
+          case 'btn-down':
+            touchFlags.back = true;
+            if (dx > THRESHOLD) touchFlags.right = true;
+            if (dx < -THRESHOLD) touchFlags.left = true;
+            break;
+          case 'btn-left':
+            touchFlags.left = true;
+            if (dy > THRESHOLD) touchFlags.back = true;
+            if (dy < -THRESHOLD) touchFlags.fwd = true;
+            break;
+          case 'btn-right':
+            touchFlags.right = true;
+            if (dy > THRESHOLD) touchFlags.back = true;
+            if (dy < -THRESHOLD) touchFlags.fwd = true;
+            break;
+        }
+      }
+    }, { passive: false });
+
     dpad.appendChild(makeBtn('btn-up',    '▲', () => touchFlags.fwd  = true,  () => touchFlags.fwd  = false));
     dpad.appendChild(makeBtn('btn-down',  '▼', () => touchFlags.back = true,  () => touchFlags.back = false));
     dpad.appendChild(makeBtn('btn-left',  '◄', () => touchFlags.left = true,  () => touchFlags.left = false));
