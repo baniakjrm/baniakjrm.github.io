@@ -9,12 +9,28 @@
     #canvas { display: block; margin: 0 auto; image-rendering: pixelated; }
     #hud { position: fixed; left: 12px; top: 10px; font-size: 14px; opacity: 0.9; user-select: none; }
     #help { position: fixed; left: 12px; top: 30px; font-size: 12px; color: #bfbfbf; opacity: 0.9; user-select: none; }
+    #shootBtn, #dpad { position: fixed; touch-action: none; }
+    #shootBtn { right: 20px; bottom: 20px; width: 80px; height: 80px; background: rgba(255,255,255,0); }
+    #dpad { left: 20px; bottom: 20px; width: 120px; height: 120px; }
+    #dpad .pad { position: absolute; width: 40px; height: 40px; background: rgba(255,255,255,0); }
+    #dpad .up { left: 40px; top: 0; }
+    #dpad .down { left: 40px; bottom: 0; }
+    #dpad .left { left: 0; top: 40px; }
+    #dpad .right { right: 0; top: 40px; }
+    .hidden { display: none; }
   </style>
 </head>
 <body>
   <canvas id="canvas" width="960" height="600"></canvas>
   <div id="hud"></div>
   <div id="help">Move: W/S, Look: A/D or ←/→, Reset: R</div>
+  <div id="dpad" class="hidden">
+    <div class="pad up" data-code="KeyW"></div>
+    <div class="pad down" data-code="KeyS"></div>
+    <div class="pad left" data-code="KeyA"></div>
+    <div class="pad right" data-code="KeyD"></div>
+  </div>
+  <div id="shootBtn" class="hidden"></div>
   <script>
   // ------------------------------------------------------------
   // Infinite (no-global-memory) Zelda-style labyrinth raycaster (Web)
@@ -536,6 +552,24 @@
     if (e.code === 'KeyR') start_new_run();
   });
   window.addEventListener('keyup', (e) => keys.delete(e.code));
+  const isMobile = /Mobi|Android|iPhone|iPad|iPod|Touch/i.test(navigator.userAgent);
+  if (isMobile) {
+    const dpad = document.getElementById('dpad');
+    const shootBtn = document.getElementById('shootBtn');
+    dpad.classList.remove('hidden');
+    shootBtn.classList.remove('hidden');
+    const mapTouch = (el, code) => {
+      el.addEventListener('touchstart', e => { e.preventDefault(); keys.add(code); });
+      const up = e => { e.preventDefault(); keys.delete(code); };
+      el.addEventListener('touchend', up);
+      el.addEventListener('touchcancel', up);
+    };
+    mapTouch(dpad.querySelector('.up'), 'KeyW');
+    mapTouch(dpad.querySelector('.down'), 'KeyS');
+    mapTouch(dpad.querySelector('.left'), 'KeyA');
+    mapTouch(dpad.querySelector('.right'), 'KeyD');
+    shootBtn.addEventListener('touchstart', e => { e.preventDefault(); spawnShot(); });
+  }
 
   // ---------------- Rendering ----------------
   function fillRectColor(x, y, w, h, rgb) {
