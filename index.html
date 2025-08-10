@@ -18,11 +18,6 @@
   <script>
   // ------------------------------------------------------------
   // Infinite (no-global-memory) Zelda-style labyrinth raycaster (Web)
-  // - Ported from a Pygame reference implementation
-  // - Rainbow wall colors per tile
-  // - Move:  W/S forward/back
-  // - Look:  A/D or Left/Right arrows
-  // - Reset: R
   // ------------------------------------------------------------
 
   // ---------------- Canvas & timing ----------------
@@ -32,44 +27,148 @@
   let H = canvas.height;
   let HALF_H = (H / 2) | 0;
 
-    // --- Blaster overlay (HUD) ---
-  const blasterImg = new Image();
-  blasterImg.src = 'blaster.png';   // same directory as the HTML
-
-  // Size you can tweak:
-  let BLASTER_SCALE = 5.0;          // <- change this to resize the blaster (e.g., 0.8, 1.25)
-
-  // Screen offsets from bottom-right (in canvas pixels, internal 960x600 space)
-  const BLASTER_OFFSET_X = 20;
-  const BLASTER_OFFSET_Y = 18;
-
-  // Simple parabolic sway settings
-  const SWAY_DUR  = 0.35;           // seconds for one arc
-  const SWAY_AMP_X = 18;            // peak horizontal px
-  const SWAY_AMP_Y = 12;            // peak vertical px
-
-  let swayClock = 0;                // time spent animating while moving/turning
-  let lastYawSign = 0;              // -1 when turning left, +1 when turning right
-
-  // Optional: keep pixel-art crisp
   ctx.imageSmoothingEnabled = false;
 
+  // --- Blaster overlay (HUD) ---
+  const blasterImg = new Image();
+  blasterImg.src = 'blaster.png';
 
-  function resizeToWindow() {
-    // Keep a consistent internal resolution for performance; scale with CSS
-    const maxW = Math.min(window.innerWidth, 1280);
-    const maxH = Math.min(window.innerHeight, 720);
-    // Maintain 16:10-ish aspect similar to 960x600
-    let targetW = 960, targetH = 600;
-    if (maxW / maxH < targetW / targetH) {
-      const scale = maxW / targetW;
-      canvas.style.width = Math.round(targetW * scale) + 'px';
-      canvas.style.height = Math.round(targetH * scale) + 'px';
-    } else {
-      const scale = maxH / targetH;
-      canvas.style.width = Math.round(targetW * scale) + 'px';
-      canvas.style.height = Math.round(targetH * scale) + 'px';
+  let BLASTER_SCALE = 5.0;
+
+  const SWAY_DUR   = 0.35;
+  const SWAY_AMP_X = 18;
+  const SWAY_AMP_Y = 12;
+
+  const BLASTER_BLEED_X = SWAY_AMP_X + 6;
+  const BLASTER_BLEED_Y = 6;
+
+  let swayClock = 0;
+  let lastYawSign = 0;
+  let lastBlasterRect = null;
+
+  function drawBlaster(turning, moving, yawSign, clock) {
+    if (!blasterImg.complete) return;
+    const u = ((clock % SWAY_DUR) / SWAY_DUR);
+    const parab = (turning || moving) ? (4 * u * (1 - u)) : 0;
+
+    const dx = -yawSign * SWAY_AMP_X * parab;
+    const dy = (turning || moving ? 1 : 0) * SWAY_AMP_Y * parab;
+
+    const w = blasterImg.width  * BLASTER_SCALE;
+    const h = blasterImg.height * BLASTER_SCALE;
+
+    const baseX = W - w + BLASTER_BLEED_X;
+    const baseY = H - h + BLASTER_BLEED_Y;
+
+    const x = baseX + dx;
+    const y = baseY + dy;
+
+    lastBlasterRect = { x, y, w, h };
+    ctx.drawImage(blasterImg, x, y, w, h);
+  }
+
+  // --------------- 3D projectiles (sprite-based) ---------------
+  const shotImg = new Image();
+  shotImg.src = 'blast.png';
+
+  const shots = [];
+  const SHOT_SPEED = 18.0;      // tiles / second
+  const SHOT_TTL   = 1.2;       // seconds max lifetime
+  const SHOT_SCALE = 0.5;       // ✱ CHANGED: 50% size
+
+  function spawnShot() {
+    // muzzle offset: a bit forward, a bit to the right of camera
+    const forward = 0.80;
+    const rightOff = 0.30;
+
+    // ✱ CHANGED: ensure "right" is truly to the player's right on screen
+    const rx = -dirY, ry = dirX;
+
+    const sx = posX + dirX * forward + rx * rightOff;
+    const sy = posY + dirY * forward + ry * rightOff;
+
+    shots.push({
+      x: sx, y: sy,
+      vx: dirX * SHOT_SPEED,
+      vy: dirY * SHOT_SPEED,
+      t: 0
+    });
+  }
+
+  window.addEventListener('mousedown', (e) => {
+    if (e.button === 0) spawnShot();
+  });
+
+  function moveShots(dt) {
+    for (let i = shots.length - 1; i >= 0; i--) {
+      const s = shots[i];
+      let remain = dt;
+      const STEP = 0.025;
+
+      while (remain > 0) {
+        const d = Math.min(STEP, remain);
+        const nx = s.x + s.vx * d;
+        const ny = s.y + s.vy * d;
+
+        if (!can_move(nx, ny)) { shots.splice(i, 1); break; }
+
+        s.x = nx; s.y = ny; s.t += d; remain -= d;
+        if (s.t > SHOT_TTL) { shots.splice(i, 1); break; }
+      }
     }
+  }
+
+  let zBuf = null;
+
+  function drawShots(zBuf) {
+    if (!shotImg.complete) return;
+
+    const order = shots
+      .map((s, i) => ({ i, d: (s.x - posX) ** 2 + (s.y - posY) ** 2 }))
+      .sort((a, b) => b.d - a.d);
+
+    for (const o of order) {
+      const s = shots[o.i];
+
+      const relX = s.x - posX;
+      const relY = s.y - posY;
+      const invDet = 1.0 / (planeX * dirY - dirX * planeY);
+      const transX = invDet * ( dirY * relX - dirX * relY);
+      const transY = invDet * (-planeY * relX + planeX * relY);
+      if (transY <= 0.0001) continue;
+
+      // ✱ CHANGED: scale down sprite
+      const screenX = (W / 2) * (1 + transX / transY);
+      const spriteH = Math.abs((H / transY) * SHOT_SCALE);
+      const spriteW = spriteH;
+
+      const drawStartY = Math.max(0, ((-spriteH / 2 + HALF_H) | 0));
+      const drawEndY   = Math.min(H - 1, ((spriteH / 2 + HALF_H) | 0));
+      const drawStartX = Math.max(0, ((-spriteW / 2 + screenX) | 0));
+      const drawEndX   = Math.min(W - 1, ((spriteW / 2 + screenX) | 0));
+
+      for (let stripe = drawStartX; stripe <= drawEndX; stripe++) {
+        if (transY < zBuf[stripe]) {
+          const u = (stripe - (-spriteW / 2 + screenX)) / spriteW;
+          const texX = Math.max(0, Math.min(shotImg.width - 1, Math.floor(u * shotImg.width)));
+          ctx.drawImage(
+            shotImg,
+            texX, 0, 1, shotImg.height,
+            stripe, drawStartY, 1, drawEndY - drawStartY + 1
+          );
+        }
+      }
+    }
+  }
+
+  // ✱ CHANGED: scale canvas to the largest possible size inside the window
+  // while preserving the 960×600 internal resolution & aspect ratio.
+  function resizeToWindow() {
+    const targetW = canvas.width;
+    const targetH = canvas.height;
+    const scale = Math.min(window.innerWidth / targetW, window.innerHeight / targetH);
+    canvas.style.width  = Math.round(targetW * scale) + 'px';
+    canvas.style.height = Math.round(targetH * scale) + 'px';
   }
   window.addEventListener('resize', resizeToWindow);
   resizeToWindow();
@@ -113,20 +212,18 @@
 
   class Tile {
     constructor(orient_dir, kind, open_sides, wall_id, color, label) {
-      this.orient_dir = orient_dir;   // immutable orientation
-      this.kind = kind;               // 'room3', 'dead', 'straight', 'Lleft', 'Lright'
+      this.orient_dir = orient_dir;
+      this.kind = kind;
       this.open_sides = new Set(open_sides);
       this.wall_id = wall_id;
-      this.color = color;             // [r,g,b]
+      this.color = color;
       this.label = label;
-      this.neighbors = new Map();     // dir -> Tile
+      this.neighbors = new Map();
     }
   }
 
-  // Labyrinth state
   let current_tile = null;
   let prev_tile = null;
-  // Map<Tile, [ox, oy]>
   const tile_positions = new Map();
   let wall_id_counter = 10;
 
@@ -165,7 +262,6 @@
   function generate_tile(orient_dir) {
     const kinds = ['room3', 'dead', 'straight', 'Lleft', 'Lright'];
     const weights = [0.30, 0.12, 0.28, 0.15, 0.15];
-    // weighted choice
     let r = Math.random();
     let acc = 0;
     let kind = kinds[0];
@@ -195,7 +291,6 @@
     for (let y=0; y<WORLD_H; y++) {
       WORLD[y] = new Array(WORLD_W).fill(0);
     }
-    // Outer boundary
     for (let x=0; x<WORLD_W; x++) {
       WORLD[0][x] = BOUNDARY_ID;
       WORLD[WORLD_H-1][x] = BOUNDARY_ID;
@@ -210,28 +305,17 @@
     const cx = (ox + (TILE/2)|0);
     const cy = (oy + (TILE/2)|0);
     const half = (DOOR_W/2)|0;
-    if (edge === 0) { // N
-      const y = oy;
-      for (let i=-half; i<=half; i++) WORLD[y][cx + i] = 0;
-    } else if (edge === 2) { // S
-      const y = oy + TILE - 1;
-      for (let i=-half; i<=half; i++) WORLD[y][cx + i] = 0;
-    } else if (edge === 1) { // E
-      const x = ox + TILE - 1;
-      for (let i=-half; i<=half; i++) WORLD[cy + i][x] = 0;
-    } else if (edge === 3) { // W
-      const x = ox;
-      for (let i=-half; i<=half; i++) WORLD[cy + i][x] = 0;
-    }
+    if (edge === 0) { const y = oy; for (let i=-half; i<=half; i++) WORLD[y][cx + i] = 0; }
+    else if (edge === 2) { const y = oy + TILE - 1; for (let i=-half; i<=half; i++) WORLD[y][cx + i] = 0; }
+    else if (edge === 1) { const x = ox + TILE - 1; for (let i=-half; i<=half; i++) WORLD[cy + i][x] = 0; }
+    else if (edge === 3) { const x = ox; for (let i=-half; i<=half; i++) WORLD[cy + i][x] = 0; }
   }
 
   function draw_border_box(ox, oy, wid) {
-    // top & bottom
     for (let x=ox; x<ox+TILE; x++) {
       WORLD[oy][x] = wid;
       WORLD[oy + TILE - 1][x] = wid;
     }
-    // left & right
     for (let y=oy; y<oy+TILE; y++) {
       WORLD[y][ox] = wid;
       WORLD[y][ox + TILE - 1] = wid;
@@ -261,7 +345,6 @@
   function build_room(ox, oy, tile) {
     draw_border_box(ox, oy, tile.wall_id);
     for (const side of tile.open_sides) carve_door(side, ox, oy);
-    // interior remains open
   }
 
   function build_hall_straight(ox, oy, tile) {
@@ -319,12 +402,10 @@
     empty_world();
     tile_positions.clear();
 
-    // place center at (1,1)
     const [cx, cy] = grid_origin(1,1);
     build_tile_at(cx, cy, center);
     tile_positions.set(center, [cx, cy]);
 
-    // place previous at the back side
     if (prev && back_side !== null && back_side !== undefined) {
       const tx = 1 + DX[back_side];
       const ty = 1 + DY[back_side];
@@ -335,7 +416,6 @@
       }
     }
 
-    // place current neighbors
     for (const [side, neigh] of center.neighbors.entries()) {
       const tx = 1 + DX[side];
       const ty = 1 + DY[side];
@@ -420,6 +500,10 @@
     const [new_ox, new_oy] = tile_positions.get(next_tile);
     posX = posX - old_ox + new_ox;
     posY = posY - old_oy + new_oy;
+    for (const s of shots) {
+      s.x = s.x - old_ox + new_ox;
+      s.y = s.y - old_oy + new_oy;
+    }
 
     current_tile = next_tile;
   }
@@ -430,7 +514,7 @@
   }
 
   function start_new_run() {
-    current_tile = generate_tile(3); // start as if you came from West
+    current_tile = generate_tile(3);
     current_tile.kind = 'room3';
     current_tile.open_sides = new Set([0,1,2,3]);
     generate_neighbors_for_center(current_tile, 3);
@@ -458,26 +542,6 @@
     ctx.fillStyle = `rgb(${rgb[0]},${rgb[1]},${rgb[2]})`;
     ctx.fillRect(x, y, w, h);
   }
-
-  function drawBlaster(turning, moving, yawSign, clock) {
-  if (!blasterImg.complete) return;
-
-  // 0..1..0 parabola: 4u(1-u)
-  const u = ((clock % SWAY_DUR) / SWAY_DUR);
-  const parab = (turning || moving) ? (4 * u * (1 - u)) : 0;
-
-  const dx = -yawSign * SWAY_AMP_X * parab;       // lag opposite the turn
-  const dy = (turning || moving ? 1 : 0) * SWAY_AMP_Y * parab; // dip on any motion
-
-  const w = blasterImg.width  * BLASTER_SCALE;
-  const h = blasterImg.height * BLASTER_SCALE;
-
-  const x = W - w - BLASTER_OFFSET_X + dx;
-  const y = H - h - BLASTER_OFFSET_Y + dy;
-
-  ctx.drawImage(blasterImg, x, y, w, h);
-}
-
 
   function loop() {
     const now = performance.now();
@@ -513,11 +577,11 @@
 
     ensure_neighbors_visible();
 
-    // Clear sky & floor
+    moveShots(dt);
+
     fillRectColor(0, 0, W, HALF_H, SKY);
     fillRectColor(0, HALF_H, W, HALF_H, FLOOR);
 
-    // Raycasting per column
     for (let x=0; x<W; x++) {
       const cameraX = 2 * x / W - 1;
       const rayDirX = dirX + planeX * cameraX;
@@ -560,33 +624,32 @@
       const shade = Math.max(0.4, Math.min(1.0, 2.0 / (perpWallDist + 0.5)));
       const color = [(base[0]*shade)|0, (base[1]*shade)|0, (base[2]*shade)|0];
 
-      // draw 1px vertical slice
       ctx.fillStyle = `rgb(${color[0]},${color[1]},${color[2]})`;
       ctx.fillRect(x, drawStart, 1, drawEnd - drawStart + 1);
+
+      if (!zBuf) zBuf = new Float32Array(W);
+      zBuf[x] = perpWallDist;
     }
 
-    // HUD
+    drawShots(zBuf);
+
     const hud = document.getElementById('hud');
     hud.textContent = `${current_tile?.label || ''}`;
 
-        // Determine movement/turning for sway
     const turning = (rot !== 0);
     const moving  = keys.has('KeyW') || keys.has('KeyS');
 
     let yawSign = 0;
     if (turning) yawSign = rot > 0 ? 1 : -1;
 
-    // Advance/stop the sway clock
     if (turning || moving) {
       swayClock += dt;
       if (yawSign !== 0) lastYawSign = yawSign;
     } else {
-      // Standstill: reset to static pose
       swayClock = 0;
       lastYawSign = 0;
     }
 
-    // Draw the blaster overlay
     drawBlaster(turning, moving, lastYawSign, swayClock);
 
     requestAnimationFrame(loop);
@@ -596,8 +659,8 @@
 
   function init() {
     start_new_run();
-    // run at fixed internal resolution
     W = canvas.width; H = canvas.height; HALF_H = (H/2)|0;
+    zBuf = new Float32Array(W);
     requestAnimationFrame(loop);
   }
 
