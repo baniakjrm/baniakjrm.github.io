@@ -127,6 +127,12 @@
         const trackInfo = activeTouches.get(touch.identifier);
         if (!trackInfo) continue;
 
+        // Get the bounds of the forward and backward buttons for vertical sliding
+        const upBtn = document.getElementById('btn-up');
+        const downBtn = document.getElementById('btn-down');
+        const upBounds = upBtn.getBoundingClientRect();
+        const downBounds = downBtn.getBoundingClientRect();
+
         // Calculate how far we've moved from start position
         const dx = touch.clientX - trackInfo.startX;
         const dy = touch.clientY - trackInfo.startY;
@@ -141,24 +147,34 @@
         // Set appropriate flags based on original button and movement
         switch(trackInfo.startBtn) {
           case 'btn-up':
-            touchFlags.fwd = true;
+            // Check if we've slid down into the backward button's zone
+            if (touch.clientY >= downBounds.top) {
+              touchFlags.back = true;
+            } else {
+              touchFlags.fwd = true;
+            }
             if (dx > THRESHOLD) touchFlags.right = true;
             if (dx < -THRESHOLD) touchFlags.left = true;
             break;
           case 'btn-down':
-            touchFlags.back = true;
+            // Check if we've slid up into the forward button's zone
+            if (touch.clientY <= upBounds.bottom) {
+              touchFlags.fwd = true;
+            } else {
+              touchFlags.back = true;
+            }
             if (dx > THRESHOLD) touchFlags.right = true;
             if (dx < -THRESHOLD) touchFlags.left = true;
             break;
           case 'btn-left':
             touchFlags.left = true;
-            if (dy > THRESHOLD) touchFlags.back = true;
-            if (dy < -THRESHOLD) touchFlags.fwd = true;
+            if (touch.clientY <= upBounds.bottom) touchFlags.fwd = true;
+            if (touch.clientY >= downBounds.top) touchFlags.back = true;
             break;
           case 'btn-right':
             touchFlags.right = true;
-            if (dy > THRESHOLD) touchFlags.back = true;
-            if (dy < -THRESHOLD) touchFlags.fwd = true;
+            if (touch.clientY <= upBounds.bottom) touchFlags.fwd = true;
+            if (touch.clientY >= downBounds.top) touchFlags.back = true;
             break;
         }
       }
