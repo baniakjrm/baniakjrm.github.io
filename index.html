@@ -6,7 +6,7 @@
   <title>Infinite Rainbow Labyrinth (Web)</title>
   <style>
     html, body { margin: 0; height: 100%; background: #000; color: #fff; font-family: system-ui, Segoe UI, Roboto, Helvetica, Arial, sans-serif; }
-    #canvas { display: block; margin: 0 auto; image-rendering: pixelated; touch-action: none; }
+    #canvas { display: block; margin: 0 auto; image-rendering: pixelated; }
     #hud { position: fixed; left: 12px; top: 10px; font-size: 14px; opacity: 0.9; user-select: none; }
     #help { position: fixed; left: 12px; top: 30px; font-size: 12px; color: #bfbfbf; opacity: 0.9; user-select: none; }
   </style>
@@ -14,7 +14,7 @@
 <body>
   <canvas id="canvas" width="960" height="600"></canvas>
   <div id="hud"></div>
-  <div id="help">Move: W/S, Look: A/D or ←/→, Reset: R · Touch: left=look left, middle=forward, right=look right (hold to continue)</div>
+  <div id="help">Move: W/S, Look: A/D or ←/→, Reset: R</div>
   <script>
   // ------------------------------------------------------------
   // Infinite (no-global-memory) Zelda-style labyrinth raycaster (Web)
@@ -31,6 +31,29 @@
   let W = canvas.width;
   let H = canvas.height;
   let HALF_H = (H / 2) | 0;
+
+    // --- Blaster overlay (HUD) ---
+  const blasterImg = new Image();
+  blasterImg.src = 'blaster.png';   // same directory as the HTML
+
+  // Size you can tweak:
+  let BLASTER_SCALE = 5.0;          // <- change this to resize the blaster (e.g., 0.8, 1.25)
+
+  // Screen offsets from bottom-right (in canvas pixels, internal 960x600 space)
+  const BLASTER_OFFSET_X = 20;
+  const BLASTER_OFFSET_Y = 18;
+
+  // Simple parabolic sway settings
+  const SWAY_DUR  = 0.35;           // seconds for one arc
+  const SWAY_AMP_X = 18;            // peak horizontal px
+  const SWAY_AMP_Y = 12;            // peak vertical px
+
+  let swayClock = 0;                // time spent animating while moving/turning
+  let lastYawSign = 0;              // -1 when turning left, +1 when turning right
+
+  // Optional: keep pixel-art crisp
+  ctx.imageSmoothingEnabled = false;
+
 
   function resizeToWindow() {
     // Keep a consistent internal resolution for performance; scale with CSS
@@ -430,43 +453,31 @@
   });
   window.addEventListener('keyup', (e) => keys.delete(e.code));
 
-  // Touch controls: tap/hold left third = look left, middle = forward, right = look right
-  let touchForward = false, touchLeft = false, touchRight = false;
-  function updateTouchFlagsFromTouches(touches) {
-    touchForward = touchLeft = touchRight = false;
-    const rect = canvas.getBoundingClientRect();
-    const third = rect.width / 3;
-    for (let i = 0; i < touches.length; i++) {
-      const x = touches[i].clientX - rect.left;
-      if (x < third) touchLeft = true;
-      else if (x < 2 * third) touchForward = true;
-      else touchRight = true;
-    }
-  }
-  function clearTouches() { touchForward = touchLeft = touchRight = false; }
-  canvas.addEventListener('touchstart', (e) => {
-    e.preventDefault();
-    updateTouchFlagsFromTouches(e.touches);
-  }, { passive: false });
-  canvas.addEventListener('touchmove', (e) => {
-    e.preventDefault();
-    updateTouchFlagsFromTouches(e.touches);
-  }, { passive: false });
-  canvas.addEventListener('touchend', (e) => {
-    e.preventDefault();
-    updateTouchFlagsFromTouches(e.touches);
-    if (e.touches.length === 0) clearTouches();
-  }, { passive: false });
-  canvas.addEventListener('touchcancel', (e) => {
-    e.preventDefault();
-    clearTouches();
-  }, { passive: false });
-
   // ---------------- Rendering ----------------
   function fillRectColor(x, y, w, h, rgb) {
     ctx.fillStyle = `rgb(${rgb[0]},${rgb[1]},${rgb[2]})`;
     ctx.fillRect(x, y, w, h);
   }
+
+  function drawBlaster(turning, moving, yawSign, clock) {
+  if (!blasterImg.complete) return;
+
+  // 0..1..0 parabola: 4u(1-u)
+  const u = ((clock % SWAY_DUR) / SWAY_DUR);
+  const parab = (turning || moving) ? (4 * u * (1 - u)) : 0;
+
+  const dx = -yawSign * SWAY_AMP_X * parab;       // lag opposite the turn
+  const dy = (turning || moving ? 1 : 0) * SWAY_AMP_Y * parab; // dip on any motion
+
+  const w = blasterImg.width  * BLASTER_SCALE;
+  const h = blasterImg.height * BLASTER_SCALE;
+
+  const x = W - w - BLASTER_OFFSET_X + dx;
+  const y = H - h - BLASTER_OFFSET_Y + dy;
+
+  ctx.drawImage(blasterImg, x, y, w, h);
+}
+
 
   function loop() {
     const now = performance.now();
@@ -475,8 +486,8 @@
 
     // Rotation
     let rot = 0.0;
-    if (keys.has('KeyD') || keys.has('ArrowRight') || touchRight) rot += ROT_SPEED * dt * 3;
-    if (keys.has('KeyA') || keys.has('ArrowLeft')  || touchLeft)  rot -= ROT_SPEED * dt * 3;
+    if (keys.has('KeyD') || keys.has('ArrowRight')) rot += ROT_SPEED * dt * 3;
+    if (keys.has('KeyA') || keys.has('ArrowLeft'))  rot -= ROT_SPEED * dt * 3;
     if (rot !== 0.0) {
       const cos = Math.cos(rot), sin = Math.sin(rot);
       const oldDirX = dirX;
@@ -489,7 +500,7 @@
 
     // Movement
     const move = MOVE_SPEED * dt * 3;
-    if (keys.has('KeyW') || touchForward) {
+    if (keys.has('KeyW')) {
       const nx = posX + dirX * move, ny = posY + dirY * move;
       if (can_move(nx, posY)) posX = nx;
       if (can_move(posX, ny)) posY = ny;
@@ -558,7 +569,28 @@
     const hud = document.getElementById('hud');
     hud.textContent = `${current_tile?.label || ''}`;
 
+        // Determine movement/turning for sway
+    const turning = (rot !== 0);
+    const moving  = keys.has('KeyW') || keys.has('KeyS');
+
+    let yawSign = 0;
+    if (turning) yawSign = rot > 0 ? 1 : -1;
+
+    // Advance/stop the sway clock
+    if (turning || moving) {
+      swayClock += dt;
+      if (yawSign !== 0) lastYawSign = yawSign;
+    } else {
+      // Standstill: reset to static pose
+      swayClock = 0;
+      lastYawSign = 0;
+    }
+
+    // Draw the blaster overlay
+    drawBlaster(turning, moving, lastYawSign, swayClock);
+
     requestAnimationFrame(loop);
+
   }
   loop.lastNow = performance.now();
 
