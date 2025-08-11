@@ -495,111 +495,7 @@
     return [null, null];
   }
 
-  // ---------- Enemies ----------
-  const enemyImg = new Image(); enemyImg.src = 'enemy.png';
-  const ENEMY_SPEED = 1.6;
-  const ENEMY_RADIUS = 0.35;
-  const PLAYER_RADIUS = 0.35;
-  const ENEMY_SCALE = 0.9; // sprite height relative to wall scale
-
-  let enemy = null; // { tile, x, y, anim, flip }
-  let kills = 0;
-  const killsBox = document.getElementById('kills');
-  const updateKillsUI = () => killsBox.textContent = String(kills);
-
-  const isRoom = (tile) => tile && (tile.kind === 'room3' || tile.kind === 'dead' || tile.kind === 'start');
-
-function maybeSpawnEnemyFor(tile) {
-  if (!isRoom(tile)) return;
-  if (tile.isStart) return; // never spawn in the first room
-  if (tile.enemyState === 'killed' || tile.enemyState === 'spent' || tile.enemyState === 'alive') return;
-  tile.enemyState = 'alive';
-  const [ox, oy] = tile_positions.get(tile);
-  const ex = ox + TILE * 0.5, ey = oy + TILE * 0.5;
-  enemy = { tile, x: ex, y: ey, anim: 0, flip: false };
-}
-
-  function killEnemy(e) {
-    if (!e) return;
-    e.tile.enemyState = 'killed';
-    enemy = null;
-    kills++; updateKillsUI();
-  }
-
-  let gameOverCountdown = -1.0;
-  function triggerGameOver() {
-    gameOverCountdown = 1.2; // seconds to show screen before reset
-  }
-
-  function updateEnemy(dt) {
-    if (!enemy) return;
-
-    // Walk toward player
-    const dx = posX - enemy.x, dy = posY - enemy.y;
-    const dist = Math.hypot(dx, dy);
-    if (dist > 1e-4) {
-      const step = ENEMY_SPEED * dt;
-      const ux = dx / dist, uy = dy / dist;
-      const nx = enemy.x + ux * step, ny = enemy.y + uy * step;
-      if (can_move(nx, enemy.y)) enemy.x = nx;
-      if (can_move(enemy.x, ny)) enemy.y = ny;
-    }
-
-    // Flip back/forth while "walking"
-    enemy.anim += dt;
-    enemy.flip = Math.sin(enemy.anim * 8.0) > 0;
-
-    // Collide with player -> game over
-    if (dist < (PLAYER_RADIUS + ENEMY_RADIUS)) {
-      triggerGameOver();
-    }
-
-    // Collide with a shot -> enemy dies
-    for (let i = shots.length - 1; i >= 0 && enemy; i--) {
-      const s = shots[i];
-      const d2 = (s.x - enemy.x) ** 2 + (s.y - enemy.y) ** 2;
-      if (d2 < (ENEMY_RADIUS * ENEMY_RADIUS)) {
-        shots.splice(i, 1);
-        killEnemy(enemy);
-      }
-    }
-  }
-
-  function drawEnemy(zBuf) {
-    if (!enemy || !enemyImg.complete) return;
-
-    const relX = enemy.x - posX;
-    const relY = enemy.y - posY;
-    const invDet = 1.0 / (planeX * dirY - dirX * planeY);
-    const transX = invDet * ( dirY * relX - dirX * relY);
-    const transY = invDet * (-planeY * relX + planeX * relY);
-    if (transY <= 0.0001) return;
-
-    const screenX = (W / 2) * (1 + transX / transY);
-    const spriteH = Math.abs((H / transY) * ENEMY_SCALE);
-    const aspect = enemyImg.width / enemyImg.height;
-    const spriteW = spriteH * aspect;
-
-    const drawStartY = Math.max(0, ((-spriteH / 2 + HALF_H) | 0));
-    const drawEndY   = Math.min(H - 1, ((spriteH / 2 + HALF_H) | 0));
-    const drawStartX = Math.max(0, ((-spriteW / 2 + screenX) | 0));
-    const drawEndX   = Math.min(W - 1, ((spriteW / 2 + screenX) | 0));
-
-    for (let stripe = drawStartX; stripe <= drawEndX; stripe++) {
-      if (transY < zBuf[stripe]) {
-        // texture u (flip if enemy.flip)
-        const u = (stripe - (-spriteW / 2 + screenX)) / spriteW;
-        const uu = enemy.flip ? (1 - u) : u;
-        const texX = Math.max(0, Math.min(enemyImg.width - 1, Math.floor(uu * enemyImg.width)));
-        ctx.drawImage(
-          enemyImg,
-          texX, 0, 1, enemyImg.height,
-          stripe, drawStartY, 1, drawEndY - drawStartY + 1
-        );
-      }
-    }
-  }
-
+  // Re-added neighbor transition logic (was missing -> enter_neighbor not defined error)
   function enter_neighbor(direction) {
     const back_dir = back_side_of_current();
     let next_tile;
@@ -608,31 +504,37 @@ function maybeSpawnEnemyFor(tile) {
       next_tile = current_tile.neighbors.get(direction);
       if (!next_tile) return;
     }
-    const old_pos = tile_positions.get(next_tile);
-    const [old_ox, old_oy] = old_pos;
 
     const old_center = current_tile;
 
-    // Despawn enemy tied to the old center without counting as a kill
+    // If leaving a room with a live enemy, count as a clear (despawn, not kill)
     if (enemy && enemy.tile === old_center && old_center.enemyState === 'alive') {
-      old_center.enemyState = 'spent';
-      enemy = null;
+      clearEnemy(enemy, false);
     }
 
-    prev_tile = old_center;
+    // Capture the next tile's origin BEFORE world rebuild (needed for correct rebase)
+    const oldNextOrigin = tile_positions.get(next_tile);
+    const oldNextOx = oldNextOrigin[0];
+    const oldNextOy = oldNextOrigin[1];
 
+    prev_tile = old_center;
     const arrived_from = opposite(direction);
+
     generate_neighbors_for_center(next_tile, arrived_from);
     rebuild_world(next_tile, prev_tile, arrived_from);
 
-    const [new_ox, new_oy] = tile_positions.get(next_tile);
-    posX = posX - old_ox + new_ox;
-    posY = posY - old_oy + new_oy;
-    for (const s of shots) { s.x = s.x - old_ox + new_ox; s.y = s.y - old_oy + new_oy; }
+    // After rebuild, get new origin for same next_tile (now centered)
+    const [newNextOx, newNextOy] = tile_positions.get(next_tile);
+
+    // Rebase player & shots from old coordinate space to new
+    posX = posX - oldNextOx + newNextOx;
+    posY = posY - oldNextOy + newNextOy;
+    for (const s of shots) {
+      s.x = s.x - oldNextOx + newNextOx;
+      s.y = s.y - oldNextOy + newNextOy;
+    }
 
     current_tile = next_tile;
-
-    // Spawn enemy for the new center if appropriate
     maybeSpawnEnemyFor(current_tile);
   }
 
@@ -641,27 +543,209 @@ function maybeSpawnEnemyFor(tile) {
     if (t && t !== current_tile && d !== null) enter_neighbor(d);
   }
 
-function start_new_run() {
-  kills = 0; updateKillsUI();
-  enemy = null;
+  // ---------- Enemies ----------
+  const enemyImg = new Image(); enemyImg.src = 'enemy.png';
+  const ENEMY_RADIUS = 0.35;
+  const PLAYER_RADIUS = 0.35;
+  const ENEMY_SCALE = 0.9; // sprite height relative to wall scale
 
-  // Make a special first room: no rear door, no enemy
-  current_tile = generate_tile(3);   // orientation doesn't matter for this override
-  current_tile.kind = 'start';
-  current_tile.open_sides = new Set([1, 0, 2]); // front(E), left(N), right(S); no rear(W)
-  current_tile.isStart = true;
-  current_tile.label = 'start (no rear door)';
+  // Difficulty / progression
+  let kills = 0, clears = 0, maxDifficulty = 0.0; // difficulty in [0,1]
+  const killsBox = document.getElementById('kills');
+  const updateKillsUI = () => killsBox.textContent = String(kills);
 
-  generate_neighbors_for_center(current_tile, 3); // also tells generator “don’t make a back neighbor”
-  prev_tile = null;
-  rebuild_world(current_tile, prev_tile, null);
+  // Color & speed mapping (d in [0,1]): Blue->Green->Red
+  function enemyColorForDifficulty(d) {
+    if (d < 0.5) {
+      const t = d / 0.5; // 0→1
+      return [
+        0,
+        Math.round(180 + 75 * t), // G: 180→255
+        Math.round(255 * (1 - t)) // B: 255→0
+      ];
+    } else {
+      const t = (d - 0.5) / 0.5;
+      return [
+        Math.round(255 * t),      // R: 0→255
+        Math.round(255 * (1 - t)),// G: 255→0
+        0
+      ];
+    }
+  }
+  function enemySpeedForDifficulty(d) {
+    return 1.0 + 2.5 * d; // blue 1.0 → red 3.5
+  }
 
-  const [ox, oy] = tile_positions.get(current_tile);
-  posX = ox + TILE * 0.5; posY = oy + TILE * 0.5;
-  dirX = 1.0; dirY = 0.0; planeX = 0.0; planeY = 0.66;
+  // Tint helper
+  // REMOVE old enemyTintCanvas / enemyTintCtx and pixel loop (was causing DOMException)
+  // const enemyTintCanvas = document.createElement('canvas');
+  // const enemyTintCtx = enemyTintCanvas.getContext('2d');
+  function makeTintedEnemyCanvas(color) {
+    if (!enemyImg.complete || !enemyImg.naturalWidth) return null;
+    const [r,g,b] = color;
+    const c = document.createElement('canvas');
+    c.width = enemyImg.width;
+    c.height = enemyImg.height;
+    const gctx = c.getContext('2d');
 
-  // Do NOT spawn an enemy in the starting room
-}
+    // 1. Draw original grayscale
+    gctx.drawImage(enemyImg, 0, 0);
+
+    // 2. Multiply color to preserve shading
+    gctx.globalCompositeOperation = 'multiply';
+    gctx.fillStyle = `rgb(${r},${g},${b})`;
+    gctx.fillRect(0, 0, c.width, c.height);
+
+    // 3. Re-apply original alpha (mask)
+    gctx.globalCompositeOperation = 'destination-in';
+    gctx.drawImage(enemyImg, 0, 0);
+
+    // Reset blend mode for later draws
+    gctx.globalCompositeOperation = 'source-over';
+    return c;
+  }
+
+  // Spawn points: center + 4 corners
+  function pickEnemySpawn(tile_origin) {
+    const [ox, oy] = tile_origin;
+    const pts = [
+      [ox + TILE * 0.5, oy + TILE * 0.5],
+      [ox + TILE * 0.25, oy + TILE * 0.25],
+      [ox + TILE * 0.75, oy + TILE * 0.25],
+      [ox + TILE * 0.25, oy + TILE * 0.75],
+      [ox + TILE * 0.75, oy + TILE * 0.75],
+    ];
+    return pts[(Math.random()*pts.length)|0];
+  }
+
+  let enemy = null; // { tile,x,y,anim,flip,color,speed,difficulty,canvas }
+
+  const isRoom = (tile) => tile && (tile.kind === 'room3' || tile.kind === 'dead' || tile.kind === 'start');
+
+  function maybeSpawnEnemyFor(tile) {
+    if (!isRoom(tile)) return;
+    if (tile.isStart) return;
+    if (tile.enemyState === 'alive' || tile.enemyState === 'killed' || tile.enemyState === 'spent') return;
+    tile.enemyState = 'alive';
+
+    // Allow higher difficulty as clears rise
+    // Example: clears 0 → maxDifficulty 0, clears 10 → 0.5, clears 20 → 1.0
+    maxDifficulty = Math.min(1.0, clears / 20.0);
+    const difficulty = Math.random() * Math.max(0.05, maxDifficulty); // keep >0 for visible blue
+    const color = enemyColorForDifficulty(difficulty);
+    const speed = enemySpeedForDifficulty(difficulty);
+
+    const [ox, oy] = tile_positions.get(tile);
+    const [ex, ey] = pickEnemySpawn([ox, oy]);
+
+    const tint = makeTintedEnemyCanvas(color);
+    enemy = { tile, x: ex, y: ey, anim: 0, flip: false, color, speed, difficulty, canvas: tint };
+  }
+
+  function clearEnemy(e, wasKill) {
+    if (!e) return;
+    if (e.tile.enemyState === 'alive') {
+      e.tile.enemyState = wasKill ? 'killed' : 'spent';
+      clears++;                       // progression increment (kill or despawn)
+      maxDifficulty = Math.min(1.0, clears / 20.0);
+      if (wasKill) { kills++; updateKillsUI(); }
+    }
+    if (enemy === e) enemy = null;
+  }
+
+  function killEnemy(e) {
+    clearEnemy(e, true);
+  }
+
+  let gameOverCountdown = -1.0;
+  function triggerGameOver() { gameOverCountdown = 1.2; }
+
+  function updateEnemy(dt) {
+    if (!enemy) return;
+    // Walk toward player
+    const dx = posX - enemy.x, dy = posY - enemy.y;
+    const dist = Math.hypot(dx, dy);
+    if (dist > 1e-4) {
+      const step = enemy.speed * dt;
+      const ux = dx / dist, uy = dy / dist;
+      const nx = enemy.x + ux * step, ny = enemy.y + uy * step;
+      if (can_move(nx, enemy.y)) enemy.x = nx;
+      if (can_move(enemy.x, ny)) enemy.y = ny;
+    }
+    enemy.anim += dt;
+    enemy.flip = Math.sin(enemy.anim * 8.0) > 0;
+
+    if (dist < (PLAYER_RADIUS + ENEMY_RADIUS)) triggerGameOver();
+
+    // Shots collision
+    for (let i = shots.length - 1; i >= 0 && enemy; i--) {
+      const s = shots[i];
+      const d2 = (s.x - enemy.x) ** 2 + (s.y - enemy.y) ** 2;
+      if (d2 < ENEMY_RADIUS * ENEMY_RADIUS) {
+        shots.splice(i,1);
+        killEnemy(enemy);
+      }
+    }
+  }
+
+  function drawEnemy(zBuf) {
+    if (!enemy || !enemy.canvas) return;
+    const relX = enemy.x - posX;
+    const relY = enemy.y - posY;
+    const invDet = 1.0 / (planeX * dirY - dirX * planeY);
+    const transX = invDet * ( dirY * relX - dirX * relY);
+    const transY = invDet * (-planeY * relX + planeX * relY);
+    if (transY <= 0.0001) return;
+    const screenX = (W / 2) * (1 + transX / transY);
+    const spriteH = Math.abs((H / transY) * ENEMY_SCALE);
+    const aspect = enemy.canvas.width / enemy.canvas.height;
+    const spriteW = spriteH * aspect;
+    const drawStartY = Math.max(0, ((-spriteH / 2 + HALF_H) | 0));
+    const drawEndY   = Math.min(H - 1, ((spriteH / 2 + HALF_H) | 0));
+    const drawStartX = Math.max(0, ((-spriteW / 2 + screenX) | 0));
+    const drawEndX   = Math.min(W - 1, ((spriteW / 2 + screenX) | 0));
+
+    for (let stripe = drawStartX; stripe <= drawEndX; stripe++) {
+      if (transY < zBuf[stripe]) {
+        const u = (stripe - (-spriteW / 2 + screenX)) / spriteW;
+        const uu = enemy.flip ? (1 - u) : u;
+        const texX = Math.max(0, Math.min(enemy.canvas.width - 1, Math.floor(uu * enemy.canvas.width)));
+        ctx.drawImage(
+          enemy.canvas,
+          texX, 0, 1, enemy.canvas.height,
+          stripe, drawStartY, 1, drawEndY - drawStartY + 1
+        );
+      }
+    }
+  }
+
+  // Modify despawn handling in enter_neighbor (replace existing despawn snippet):
+  // ...existing code...
+  // Despawn enemy tied to the old center without counting as a kill
+  // if (enemy && enemy.tile === old_center && old_center.enemyState === 'alive') {
+  //   old_center.enemyState = 'spent';
+  //   enemy = null;
+  // }
+  // Replace with:
+  // if (enemy && enemy.tile === old_center && old_center.enemyState === 'alive') {
+  //   clearEnemy(enemy, false); // counts toward clears progression
+  // }
+  // ...existing code...
+
+  // Reset progression in start_new_run (add clears & maxDifficulty reset):
+  // ...existing code...
+  // function start_new_run() {
+  //   kills = 0; updateKillsUI();
+  //   enemy = null;
+  //   ...
+  // }
+  // Change header lines to:
+  // function start_new_run() {
+  //   kills = 0; updateKillsUI();
+  //   clears = 0; maxDifficulty = 0.0;
+  //   enemy = null;
+  //   ...
+  // }
 
 
   // ---------------- Input ----------------
@@ -846,6 +930,38 @@ function start_new_run() {
     requestAnimationFrame(loop);
   }
   init();
+
+  function ensure_neighbors_visible() {
+    const [t, d] = which_tile_contains(posX, posY);
+    if (t && t !== current_tile && d !== null) enter_neighbor(d);
+  }
+
+  // Re-added: run reset / fresh start
+  function start_new_run() {
+    kills = 0; updateKillsUI();
+    clears = 0; maxDifficulty = 0.0;
+    enemy = null;
+    shots.length = 0;
+    gameOverCountdown = -1;
+
+    // Build special starting room (no rear/W door, no spawn)
+    current_tile = generate_tile(3);
+    current_tile.kind = 'start';
+    current_tile.open_sides = new Set([1,0,2]); // E, N, S
+    current_tile.isStart = true;
+    current_tile.label = 'start (no rear door)';
+    current_tile.enemyState = undefined;
+
+    generate_neighbors_for_center(current_tile, 3);
+    prev_tile = null;
+    rebuild_world(current_tile, prev_tile, null);
+
+    const [ox, oy] = tile_positions.get(current_tile);
+    posX = ox + TILE * 0.5;
+    posY = oy + TILE * 0.5;
+    dirX = 1.0; dirY = 0.0;
+    planeX = 0.0; planeY = 0.66;
+  }
   </script>
 </body>
 </html>
