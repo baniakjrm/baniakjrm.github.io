@@ -274,6 +274,112 @@
   const BOUNDARY_ID = 7;
   WALL_COLOR.set(BOUNDARY_ID, [0,0,0]);
 
+  // Add gray color for blocking walls
+  const BLOCK_COLOR_ID = 999;
+  WALL_COLOR.set(BLOCK_COLOR_ID, [128, 128, 128]); // Gray color
+
+  // Store blocking wall positions for collision detection
+  let blockingWalls = new Map(); // tile -> array of {x, y, side} wall positions
+
+  function createExitBlocks(tile) {
+    if (!tile || !isRoom(tile)) return;
+    
+    const origin = tile_positions.get(tile);
+    if (!origin) return;
+    
+    const [ox, oy] = origin;
+    const blocks = [];
+    
+    // Create blocks outside each exit (slightly beyond the door)
+    for (const side of tile.open_sides) {
+      const cx = ox + (TILE / 2) | 0;
+      const cy = oy + (TILE / 2) | 0;
+      const half = (DOOR_W / 2) | 0;
+      const BLOCK_OFFSET = 2; // Distance outside the room
+      
+      let blockPositions = [];
+      
+      if (side === 0) { // North exit
+        const blockY = oy - BLOCK_OFFSET;
+        for (let i = -half; i <= half; i++) {
+          const blockX = cx + i;
+          if (blockX >= 0 && blockX < WORLD_W && blockY >= 0 && blockY < WORLD_H) {
+            blockPositions.push({x: blockX, y: blockY, side});
+          }
+        }
+      } else if (side === 2) { // South exit
+        const blockY = oy + TILE - 1 + BLOCK_OFFSET;
+        for (let i = -half; i <= half; i++) {
+          const blockX = cx + i;
+          if (blockX >= 0 && blockX < WORLD_W && blockY >= 0 && blockY < WORLD_H) {
+            blockPositions.push({x: blockX, y: blockY, side});
+          }
+        }
+      } else if (side === 1) { // East exit
+        const blockX = ox + TILE - 1 + BLOCK_OFFSET;
+        for (let i = -half; i <= half; i++) {
+          const blockY = cy + i;
+          if (blockX >= 0 && blockX < WORLD_W && blockY >= 0 && blockY < WORLD_H) {
+            blockPositions.push({x: blockX, y: blockY, side});
+          }
+        }
+      } else if (side === 3) { // West exit
+        const blockX = ox - BLOCK_OFFSET;
+        for (let i = -half; i <= half; i++) {
+          const blockY = cy + i;
+          if (blockX >= 0 && blockX < WORLD_W && blockY >= 0 && blockY < WORLD_H) {
+            blockPositions.push({x: blockX, y: blockY, side});
+          }
+        }
+      }
+      
+      blocks.push(...blockPositions);
+    }
+    
+    blockingWalls.set(tile, blocks);
+    
+    // Actually place the blocks in the world
+    for (const block of blocks) {
+      WORLD[block.y][block.x] = BLOCK_COLOR_ID;
+    }
+    
+    // Mark exits as blocked
+    for (const side of tile.open_sides) {
+      tile.exitBlocks.set(side, true);
+    }
+  }
+
+  function removeExitBlocks(tile) {
+    if (!tile) return;
+    
+    const blocks = blockingWalls.get(tile);
+    if (!blocks) return;
+    
+    // Remove blocks from world
+    for (const block of blocks) {
+      if (block.x >= 0 && block.x < WORLD_W && block.y >= 0 && block.y < WORLD_H) {
+        WORLD[block.y][block.x] = 0;
+      }
+    }
+    
+    // Clear blocking state
+    tile.exitBlocks.clear();
+    blockingWalls.delete(tile);
+  }
+
+  function checkAndUpdateExitBlocks(tile) {
+    if (!tile || !tile.hasActiveEnemies) return;
+    
+    // Count alive enemies in this tile
+    const aliveCount = enemies.filter(e => e.tile === tile && e.state === 'alive').length;
+    
+    if (aliveCount === 0) {
+      // All enemies defeated, remove blocks
+      tile.hasActiveEnemies = false;
+      removeExitBlocks(tile);
+    }
+  }
+
   // Camera
   let posX = 8.0, posY = 8.0;
   let dirX = 1.0, dirY = 0.0;
@@ -302,6 +408,8 @@
       // Enemy lifecycle for this tile: undefined -> (alive) -> killed/spent
       this.enemyState = undefined; // (legacy single-enemy state, no longer used)
       this.spawned = false;        // new: prevents multiple spawn waves
+      this.exitBlocks = new Map(); // side -> true if blocked
+      this.hasActiveEnemies = false; // tracks if enemies are active in this tile
     }
   }
 
@@ -427,6 +535,7 @@
   function rebuild_world(center, prev, back_side) {
     empty_world();
     tile_positions.clear();
+    blockingWalls.clear(); // Clear blocking walls when rebuilding
 
     const [cx, cy] = grid_origin(1,1);
     build_tile_at(cx, cy, center);
@@ -446,6 +555,13 @@
         const [ox, oy] = grid_origin(tx, ty);
         build_tile_at(ox, oy, neigh);
         tile_positions.set(neigh, [ox, oy]);
+      }
+    }
+    
+    // Recreate exit blocks for tiles with active enemies
+    for (const [tile, origin] of tile_positions.entries()) {
+      if (tile.hasActiveEnemies) {
+        createExitBlocks(tile);
       }
     }
   }
@@ -649,6 +765,10 @@
         state: 'alive'
       });
     }
+    
+    // Mark tile as having active enemies and create exit blocks
+    tile.hasActiveEnemies = true;
+    createExitBlocks(tile);
   }
 
   function progressAfterStateChange(wasKill) {
@@ -661,18 +781,30 @@
     if (e.state !== 'alive') return;
     e.state = 'killed';
     progressAfterStateChange(true);
+    
+    // Check if all enemies in this tile are defeated
+    checkAndUpdateExitBlocks(e.tile);
   }
 
   function despawnEnemy(e) {
     if (e.state !== 'alive') return;
     e.state = 'spent';
     progressAfterStateChange(false);
+    
+    // Check if all enemies in this tile are defeated
+    checkAndUpdateExitBlocks(e.tile);
   }
 
   function despawnEnemiesInTile(tile) {
     for (const e of enemies) if (e.tile === tile && e.state === 'alive') despawnEnemy(e);
     // Prune non-alive from active list
     enemies = enemies.filter(e => e.state === 'alive');
+    
+    // Remove any remaining blocks for this tile
+    if (tile) {
+      tile.hasActiveEnemies = false;
+      removeExitBlocks(tile);
+    }
   }
 
   let gameOverCountdown = -1.0;
@@ -996,6 +1128,7 @@
     enemies.length = 0;
     shots.length = 0;
     gameOverCountdown = -1;
+    blockingWalls.clear(); // Clear all blocking walls
 
     current_tile = generate_tile(3);
     current_tile.kind = 'start';
