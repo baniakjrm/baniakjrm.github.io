@@ -44,6 +44,46 @@
     #shoot-btn { position: fixed; right: 3vw; bottom: 6vh; width: 18vw; height: 18vw; max-width: 160px; max-height: 160px; border-radius: 50%; background: rgba(0,255,0,0.2); border: 2px solid rgba(140,255,140,0.35); pointer-events: auto; user-select: none; -webkit-user-select: none; touch-action: none; }
     #shoot-btn:active { background: rgba(0,255,0,0.28); }
     .dpad-btn, #shoot-btn { outline: none; }
+
+    /* --- Digital Joystick --- */
+    #joystick {
+      position: fixed;
+      left: 3vw;
+      bottom: 4vh;
+      width: 28vw;
+      height: 28vw;
+      max-width: 220px;
+      max-height: 220px;
+      touch-action: none;
+      pointer-events: auto;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+    }
+
+    #joystick .outer {
+      position: absolute;
+      left: 0;
+      top: 0;
+      width: 100%;
+      height: 100%;
+      background: rgba(128,128,128,0.20);
+      border-radius: 50%;
+      pointer-events: none;
+    }
+
+    #joystick .inner {
+      position: absolute;
+      width: 38%;
+      height: 38%;
+      left: 31%;
+      top: 31%;
+      background: rgba(128,128,128,0.50);
+      border-radius: 50%;
+      pointer-events: auto;
+      touch-action: none;
+      transition: left 0.08s, top 0.08s;
+    }
   </style>
 </head>
 <body>
@@ -83,113 +123,181 @@
     const ui = document.createElement('div');
     ui.id = 'touch-ui';
 
-    const dpad = document.createElement('div');
-    dpad.id = 'dpad';
-    
-    // Track active touches
-    let activeTouches = new Map(); // touchId -> {startBtn, startX, startY}
+    // --- Digital Joystick ---
+    const joystick = document.createElement('div');
+    joystick.id = 'joystick';
+    joystick.style.position = 'fixed';
+    joystick.style.left = '3vw';
+    joystick.style.bottom = '4vh';
+    joystick.style.width = '28vw';
+    joystick.style.height = '28vw';
+    joystick.style.maxWidth = '220px';
+    joystick.style.maxHeight = '220px';
+    joystick.style.touchAction = 'none';
+    joystick.style.pointerEvents = 'auto';
+    joystick.style.display = 'flex';
+    joystick.style.alignItems = 'center';
+    joystick.style.justifyContent = 'center';
 
-    const makeBtn = (id, label, onDown, onUp) => {
-      const b = document.createElement('button');
-      b.id = id; b.className = 'dpad-btn'; b.textContent = label; b.setAttribute('aria-label', id);
-      
-      const down = (e) => { 
-        e.preventDefault(); 
-        const touch = e.touches[0];
-        activeTouches.set(touch.identifier, {
-          startBtn: id,
-          startX: touch.clientX,
-          startY: touch.clientY
-        });
-        onDown(); 
-      };
-      
-      const up = (e) => { 
-        e.preventDefault();
-        // Clear all flags when touch ends
+    // Outer circle
+    const outer = document.createElement('div');
+    outer.style.position = 'absolute';
+    outer.style.left = '0';
+    outer.style.top = '0';
+    outer.style.width = '100%';
+    outer.style.height = '100%';
+    outer.style.background = 'rgba(128,128,128,0.20)';
+    outer.style.borderRadius = '50%';
+    outer.style.pointerEvents = 'none';
+
+    // Inner (thumb) circle
+    const inner = document.createElement('div');
+    inner.style.position = 'absolute';
+    inner.style.width = '38%';
+    inner.style.height = '38%';
+    inner.style.left = '31%';
+    inner.style.top = '31%';
+    inner.style.background = 'rgba(128,128,128,0.50)';
+    inner.style.borderRadius = '50%';
+    inner.style.pointerEvents = 'auto';
+    inner.style.touchAction = 'none';
+    inner.style.transition = 'left 0.08s, top 0.08s';
+
+    joystick.appendChild(outer);
+    joystick.appendChild(inner);
+    ui.appendChild(joystick);
+
+    // --- Joystick logic ---
+    let joyActive = false, joyStart = null, joyCenter = null, joyRadius = null;
+
+    function resetJoystick() {
+      inner.style.left = '31%';
+      inner.style.top = '31%';
+      touchFlags.fwd = false;
+      touchFlags.back = false;
+      touchFlags.left = false;
+      touchFlags.right = false;
+    }
+
+    function setJoyFlagsFromAngle(angle, mag) {
+      // 8-way: Up, Up-Right, Right, Down-Right, Down, Down-Left, Left, Up-Left
+      // Threshold: only if mag > 0.22 (22% of radius)
+      if (mag < 0.22) {
         touchFlags.fwd = false;
         touchFlags.back = false;
         touchFlags.left = false;
         touchFlags.right = false;
-        activeTouches.clear();
-      };
-
-      b.addEventListener('touchstart', down, { passive:false });
-      b.addEventListener('touchend', up, { passive:false });
-      b.addEventListener('touchcancel', up, { passive:false });
-      return b;
-    };
-
-    // Add touch move handler to the d-pad
-    dpad.addEventListener('touchmove', (e) => {
-      e.preventDefault();
-      for (let touch of e.changedTouches) {
-        const trackInfo = activeTouches.get(touch.identifier);
-        if (!trackInfo) continue;
-
-        // Get the bounds of the forward and backward buttons for vertical sliding
-        const upBtn = document.getElementById('btn-up');
-        const downBtn = document.getElementById('btn-down');
-        const upBounds = upBtn.getBoundingClientRect();
-        const downBounds = downBtn.getBoundingClientRect();
-
-        // Calculate how far we've moved from start position
-        const dx = touch.clientX - trackInfo.startX;
-        const dy = touch.clientY - trackInfo.startY;
-        const THRESHOLD = 20; // pixels to trigger diagonal
-
-        // Reset all flags
-        touchFlags.fwd = false;
-        touchFlags.back = false;
-        touchFlags.left = false;
-        touchFlags.right = false;
-
-        // Set appropriate flags based on original button and movement
-        switch(trackInfo.startBtn) {
-          case 'btn-up':
-            // Check if we've slid down into the backward button's zone
-            if (touch.clientY >= downBounds.top) {
-              touchFlags.back = true;
-            } else {
-              touchFlags.fwd = true;
-            }
-            if (dx > THRESHOLD) touchFlags.right = true;
-            if (dx < -THRESHOLD) touchFlags.left = true;
-            break;
-          case 'btn-down':
-            // Check if we've slid up into the forward button's zone
-            if (touch.clientY <= upBounds.bottom) {
-              touchFlags.fwd = true;
-            } else {
-              touchFlags.back = true;
-            }
-            if (dx > THRESHOLD) touchFlags.right = true;
-            if (dx < -THRESHOLD) touchFlags.left = true;
-            break;
-          case 'btn-left':
-            touchFlags.left = true;
-            if (touch.clientY <= upBounds.bottom) touchFlags.fwd = true;
-            if (touch.clientY >= downBounds.top) touchFlags.back = true;
-            break;
-          case 'btn-right':
-            touchFlags.right = true;
-            if (touch.clientY <= upBounds.bottom) touchFlags.fwd = true;
-            if (touch.clientY >= downBounds.top) touchFlags.back = true;
-            break;
-        }
+        return;
       }
+      // Angle: 0 = up, PI/4 = up-right, PI/2 = right, etc.
+      // Map to WASD
+      // Up: -22.5° to 22.5° (337.5° to 22.5°)
+      // Up-Right: 22.5° to 67.5°
+      // Right: 67.5° to 112.5°
+      // Down-Right: 112.5° to 157.5°
+      // Down: 157.5° to 202.5°
+      // Down-Left: 202.5° to 247.5°
+      // Left: 247.5° to 292.5°
+      // Up-Left: 292.5° to 337.5°
+      // angle in radians, 0 = up, increases clockwise
+      let deg = angle * 180 / Math.PI;
+      if (deg < 0) deg += 360;
+      // Reset
+      touchFlags.fwd = false;
+      touchFlags.back = false;
+      touchFlags.left = false;
+      touchFlags.right = false;
+      if ((deg >= 337.5 || deg < 22.5)) { // Up
+        touchFlags.fwd = true;
+      } else if (deg >= 22.5 && deg < 67.5) { // Up-Right
+        touchFlags.fwd = true; touchFlags.right = true;
+      } else if (deg >= 67.5 && deg < 112.5) { // Right
+        touchFlags.right = true;
+      } else if (deg >= 112.5 && deg < 157.5) { // Down-Right
+        touchFlags.back = true; touchFlags.right = true;
+      } else if (deg >= 157.5 && deg < 202.5) { // Down
+        touchFlags.back = true;
+      } else if (deg >= 202.5 && deg < 247.5) { // Down-Left
+        touchFlags.back = true; touchFlags.left = true;
+      } else if (deg >= 247.5 && deg < 292.5) { // Left
+        touchFlags.left = true;
+      } else if (deg >= 292.5 && deg < 337.5) { // Up-Left
+        touchFlags.fwd = true; touchFlags.left = true;
+      }
+    }
+
+    function getJoyCenterAndRadius() {
+      const rect = joystick.getBoundingClientRect();
+      const cx = rect.left + rect.width / 2;
+      const cy = rect.top + rect.height / 2;
+      const r = rect.width / 2;
+      return { cx, cy, r, rect };
+    }
+
+    function updateJoystick(touch) {
+      if (!joyCenter) return;
+      const dx = touch.clientX - joyCenter.cx;
+      const dy = touch.clientY - joyCenter.cy;
+      const dist = Math.sqrt(dx * dx + dy * dy);
+      const maxDist = joyRadius * 0.78; // thumb can move up to 78% of radius
+      let ndx = dx, ndy = dy;
+      let mag = dist / joyRadius;
+      if (dist > maxDist) {
+        ndx = dx * maxDist / dist;
+        ndy = dy * maxDist / dist;
+        mag = maxDist / joyRadius;
+      }
+      // Move thumb
+      const left = 50 + (ndx / joyRadius) * 50 - 19; // 19 = half of 38%
+      const top = 50 + (ndy / joyRadius) * 50 - 19;
+      inner.style.left = `${left}%`;
+      inner.style.top = `${top}%`;
+      // Angle: 0 = up
+      const angle = Math.atan2(ndx, -ndy);
+      setJoyFlagsFromAngle(angle, mag);
+    }
+
+    inner.addEventListener('touchstart', (e) => {
+      e.preventDefault();
+      joyActive = true;
+      joyCenter = getJoyCenterAndRadius();
+      joyRadius = joyCenter.r;
+      updateJoystick(e.touches[0]);
     }, { passive: false });
 
-    dpad.appendChild(makeBtn('btn-up',    '▲', () => touchFlags.fwd  = true,  () => touchFlags.fwd  = false));
-    dpad.appendChild(makeBtn('btn-down',  '▼', () => touchFlags.back = true,  () => touchFlags.back = false));
-    dpad.appendChild(makeBtn('btn-left',  '◄', () => touchFlags.left = true,  () => touchFlags.left = false));
-    dpad.appendChild(makeBtn('btn-right', '►', () => touchFlags.right= true,  () => touchFlags.right= false));
+    joystick.addEventListener('touchstart', (e) => {
+      e.preventDefault();
+      joyActive = true;
+      joyCenter = getJoyCenterAndRadius();
+      joyRadius = joyCenter.r;
+      updateJoystick(e.touches[0]);
+    }, { passive: false });
 
+    joystick.addEventListener('touchmove', (e) => {
+      if (!joyActive) return;
+      e.preventDefault();
+      updateJoystick(e.touches[0]);
+    }, { passive: false });
+
+    joystick.addEventListener('touchend', (e) => {
+      e.preventDefault();
+      joyActive = false;
+      resetJoystick();
+    }, { passive: false });
+
+    joystick.addEventListener('touchcancel', (e) => {
+      e.preventDefault();
+      joyActive = false;
+      resetJoystick();
+    }, { passive: false });
+
+    resetJoystick();
+
+    // --- Shoot button (unchanged) ---
     const shoot = document.createElement('button');
     shoot.id = 'shoot-btn'; shoot.setAttribute('aria-label', 'Shoot');
     shoot.addEventListener('touchstart', (e) => { e.preventDefault(); spawnShot(); }, { passive:false });
 
-    ui.appendChild(dpad);
     ui.appendChild(shoot);
     document.body.appendChild(ui);
     window.addEventListener('contextmenu', (e) => e.preventDefault());
