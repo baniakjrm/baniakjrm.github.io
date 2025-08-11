@@ -339,8 +339,11 @@
 
   // --------------- Projectiles (sprite-based) ---------------
   const shotImg = new Image(); shotImg.src = 'blast.png';
+  const enemyBlastImg = new Image(); enemyBlastImg.src = 'enemyblast.png';
   const shots = [];
+  const enemyShots = []; // New: enemy projectiles
   const SHOT_SPEED = 18.0;
+  const ENEMY_SHOT_SPEED = 12.0; // Slightly slower than player shots
   const SHOT_TTL   = 1.2;
   const SHOT_SCALE = 0.5; // half size
 
@@ -360,6 +363,7 @@
   window.addEventListener('mousedown', (e) => { if (e.button === 0) spawnShot(); });
 
   function moveShots(dt) {
+    // Player shots
     for (let i = shots.length - 1; i >= 0; i--) {
       const s = shots[i];
       let remain = dt;
@@ -370,6 +374,28 @@
         if (!can_move(nx, ny)) { shots.splice(i, 1); break; }
         s.x = nx; s.y = ny; s.t += d; remain -= d;
         if (s.t > SHOT_TTL) { shots.splice(i, 1); break; }
+      }
+    }
+    
+    // Enemy shots
+    for (let i = enemyShots.length - 1; i >= 0; i--) {
+      const s = enemyShots[i];
+      let remain = dt;
+      const STEP = 0.025;
+      while (remain > 0) {
+        const d = Math.min(STEP, remain);
+        const nx = s.x + s.vx * d, ny = s.y + s.vy * d;
+        if (!can_move(nx, ny)) { enemyShots.splice(i, 1); break; }
+        s.x = nx; s.y = ny; s.t += d; remain -= d;
+        if (s.t > SHOT_TTL) { enemyShots.splice(i, 1); break; }
+        
+        // Check collision with player
+        const playerDist = Math.hypot(s.x - posX, s.y - posY);
+        if (playerDist < PLAYER_RADIUS) {
+          triggerGameOver();
+          enemyShots.splice(i, 1);
+          break;
+        }
       }
     }
   }
@@ -779,6 +805,7 @@
 
   // ---------- Enemies (multi-enemy overhaul) ----------
   const enemyImg = new Image(); enemyImg.src = 'enemy.png';
+  const rangedEnemyImg = new Image(); rangedEnemyImg.src = 'rangedenemy.png';
   const ENEMY_RADIUS = 0.35;
   const PLAYER_RADIUS = 0.35;
   const ENEMY_SCALE = 0.9;
@@ -787,6 +814,16 @@
   let kills = 0, clears = 0, maxDifficulty = 0.0;
   const killsBox = document.getElementById('kills');
   const updateKillsUI = () => killsBox.textContent = String(kills);
+
+  // Ranged enemy constants
+  const RANGED_ENEMY_SPEED = 2.25; // Fixed speed (about green normal enemy)
+  const RANGED_FIRE_RATES = {
+    blue: 3.0,   // Fire every 3 seconds
+    green: 2.0,  // Fire every 2 seconds  
+    red: 1.0     // Fire every 1 second
+  };
+  const TELEGRAPH_DURATION = 0.3; // Flash duration before firing
+  const FLASH_INTERVAL = 0.1; // Flash on/off interval
 
   // Color & speed mapping (d in [0,1]): Blue->Green->Red
   function enemyColorForDifficulty(d) {
@@ -810,20 +847,27 @@
     return 1.0 + 2.5 * d; // blue 1.0 → red 3.5
   }
 
+  function getRangedEnemyFireRate(difficulty) {
+    if (difficulty < 0.33) return RANGED_FIRE_RATES.blue;
+    if (difficulty < 0.66) return RANGED_FIRE_RATES.green;
+    return RANGED_FIRE_RATES.red;
+  }
+
   // Tint helper
   // REMOVE old enemyTintCanvas / enemyTintCtx and pixel loop (was causing DOMException)
   // const enemyTintCanvas = document.createElement('canvas');
   // const enemyTintCtx = enemyTintCanvas.getContext('2d');
-  function makeTintedEnemyCanvas(color) {
-    if (!enemyImg.complete || !enemyImg.naturalWidth) return null;
+  function makeTintedEnemyCanvas(color, isRanged = false) {
+    const sourceImg = isRanged ? rangedEnemyImg : enemyImg;
+    if (!sourceImg.complete || !sourceImg.naturalWidth) return null;
     const [r,g,b] = color;
     const c = document.createElement('canvas');
-    c.width = enemyImg.width;
-    c.height = enemyImg.height;
+    c.width = sourceImg.width;
+    c.height = sourceImg.height;
     const gctx = c.getContext('2d');
 
     // 1. Draw original grayscale
-    gctx.drawImage(enemyImg, 0, 0);
+    gctx.drawImage(sourceImg, 0, 0);
 
     // 2. Multiply color to preserve shading
     gctx.globalCompositeOperation = 'multiply';
@@ -832,9 +876,26 @@
 
     // 3. Re-apply original alpha (mask)
     gctx.globalCompositeOperation = 'destination-in';
-    gctx.drawImage(enemyImg, 0, 0);
+    gctx.drawImage(sourceImg, 0, 0);
 
     // Reset blend mode for later draws
+    gctx.globalCompositeOperation = 'source-over';
+    return c;
+  }
+
+  function makeWhiteFlashCanvas(isRanged = false) {
+    const sourceImg = isRanged ? rangedEnemyImg : enemyImg;
+    if (!sourceImg.complete || !sourceImg.naturalWidth) return null;
+    const c = document.createElement('canvas');
+    c.width = sourceImg.width;
+    c.height = sourceImg.height;
+    const gctx = c.getContext('2d');
+
+    // Draw white version for flash
+    gctx.drawImage(sourceImg, 0, 0);
+    gctx.globalCompositeOperation = 'source-in';
+    gctx.fillStyle = 'white';
+    gctx.fillRect(0, 0, c.width, c.height);
     gctx.globalCompositeOperation = 'source-over';
     return c;
   }
@@ -872,25 +933,66 @@
       [pts[i], pts[j]] = [pts[j], pts[i]];
     }
 
+    // Check if ranged enemies should be introduced (when normal enemies reach red = maxDifficulty >= 1.0)
+    const canSpawnRanged = maxDifficulty >= 1.0;
+
     for (let i = 0; i < count; i++) {
       const [ex, ey] = pts[i];
-      // Slightly varied difficulty per enemy
-      const difficulty = Math.random() * Math.max(0.05, maxDifficulty);
-      const color = enemyColorForDifficulty(difficulty);
-      const speed = enemySpeedForDifficulty(difficulty);
-      const tint = makeTintedEnemyCanvas(color);
-      enemies.push({
-        tile,
-        x: ex,
-        y: ey,
-        anim: 0,
-        flip: false,
-        color,
-        speed,
-        difficulty,
-        canvas: tint,
-        state: 'alive'
-      });
+      
+      // Determine enemy type
+      let isRanged = false;
+      if (canSpawnRanged && Math.random() < 0.4) { // 40% chance for ranged when unlocked
+        isRanged = true;
+      }
+      
+      if (isRanged) {
+        // Ranged enemy: start from blue difficulty but with own progression
+        const rangedProgress = Math.max(0, (maxDifficulty - 1.0) * 3); // Scale after normal enemies max out
+        const difficulty = Math.min(1.0, rangedProgress);
+        const color = enemyColorForDifficulty(difficulty);
+        const fireRate = getRangedEnemyFireRate(difficulty);
+        const tint = makeTintedEnemyCanvas(color, true);
+        const flashCanvas = makeWhiteFlashCanvas(true);
+        
+        enemies.push({
+          tile,
+          x: ex,
+          y: ey,
+          anim: 0,
+          flip: false,
+          color,
+          speed: RANGED_ENEMY_SPEED,
+          difficulty,
+          canvas: tint,
+          flashCanvas,
+          state: 'alive',
+          type: 'ranged',
+          lastShotTime: 0,
+          fireRate,
+          telegraphStart: -1, // When telegraph started (-1 = not telegraphing)
+          isTelegraphing: false
+        });
+      } else {
+        // Normal enemy
+        const difficulty = Math.random() * Math.max(0.05, maxDifficulty);
+        const color = enemyColorForDifficulty(difficulty);
+        const speed = enemySpeedForDifficulty(difficulty);
+        const tint = makeTintedEnemyCanvas(color, false);
+        
+        enemies.push({
+          tile,
+          x: ex,
+          y: ey,
+          anim: 0,
+          flip: false,
+          color,
+          speed,
+          difficulty,
+          canvas: tint,
+          state: 'alive',
+          type: 'normal'
+        });
+      }
     }
     
     // Mark tile as having active enemies and create exit blocks
@@ -939,25 +1041,76 @@
 
   function updateEnemies(dt) {
     if (!enemies.length) return;
+    const currentTime = performance.now() / 1000;
+    
     for (let i = enemies.length - 1; i >= 0; i--) {
       const e = enemies[i];
       if (e.state !== 'alive') continue;
-      const dx = posX - e.x, dy = posY - e.y;
-      const dist = Math.hypot(dx, dy);
-      if (dist > 1e-4) {
-        const step = e.speed * dt;
-        const ux = dx / dist, uy = dy / dist;
-        const nx = e.x + ux * step, ny = e.y + uy * step;
-        if (can_move(nx, e.y)) e.x = nx;
-        if (can_move(e.x, ny)) e.y = ny;
-      }
+      
+      // Update animation
       e.anim += dt;
       e.flip = Math.sin(e.anim * 8.0) > 0;
+      
+      if (e.type === 'ranged') {
+        // Ranged enemy behavior
+        const dx = posX - e.x, dy = posY - e.y;
+        const dist = Math.hypot(dx, dy);
+        
+        // Movement (same as normal enemies but fixed speed)
+        if (dist > 1e-4) {
+          const step = e.speed * dt;
+          const ux = dx / dist, uy = dy / dist;
+          const nx = e.x + ux * step, ny = e.y + uy * step;
+          if (can_move(nx, e.y)) e.x = nx;
+          if (can_move(e.x, ny)) e.y = ny;
+        }
+        
+        // Shooting logic
+        if (!e.isTelegraphing && currentTime - e.lastShotTime >= e.fireRate) {
+          // Start telegraphing
+          e.isTelegraphing = true;
+          e.telegraphStart = currentTime;
+        }
+        
+        if (e.isTelegraphing) {
+          const telegraphTime = currentTime - e.telegraphStart;
+          if (telegraphTime >= TELEGRAPH_DURATION) {
+            // Fire projectile
+            if (dist > 1e-4) {
+              const ux = dx / dist, uy = dy / dist;
+              enemyShots.push({
+                x: e.x,
+                y: e.y,
+                vx: ux * ENEMY_SHOT_SPEED,
+                vy: uy * ENEMY_SHOT_SPEED,
+                t: 0
+              });
+            }
+            e.lastShotTime = currentTime;
+            e.isTelegraphing = false;
+            e.telegraphStart = -1;
+          }
+        }
+        
+        // Collision with player
+        if (dist < (PLAYER_RADIUS + ENEMY_RADIUS)) triggerGameOver();
+      } else {
+        // Normal enemy behavior (unchanged)
+        const dx = posX - e.x, dy = posY - e.y;
+        const dist = Math.hypot(dx, dy);
+        if (dist > 1e-4) {
+          const step = e.speed * dt;
+          const ux = dx / dist, uy = dy / dist;
+          const nx = e.x + ux * step, ny = e.y + uy * step;
+          if (can_move(nx, e.y)) e.x = nx;
+          if (can_move(e.x, ny)) e.y = ny;
+        }
 
-      if (dist < (PLAYER_RADIUS + ENEMY_RADIUS)) triggerGameOver();
+        if (dist < (PLAYER_RADIUS + ENEMY_RADIUS)) triggerGameOver();
+      }
     }
 
-    // Shot collisions
+    // Shot collisions (player shots vs enemies)
     for (let si = shots.length - 1; si >= 0; si--) {
       const s = shots[si];
       let hit = false;
@@ -981,6 +1134,8 @@
   function drawEnemies(zBuf) {
     // Collect alive, drawable enemies with distance
     const list = [];
+    const currentTime = performance.now() / 1000;
+    
     for (const e of enemies) {
       if (e.state === 'alive' && e.canvas) {
         const d = (e.x - posX) * (e.x - posX) + (e.y - posY) * (e.y - posY);
@@ -1007,16 +1162,68 @@
       const drawStartX = Math.max(0, ((-spriteW / 2 + screenX) | 0));
       const drawEndX   = Math.min(W - 1, ((spriteW / 2 + screenX) | 0));
 
+      // Determine which canvas to use (normal, flashing, or telegraph)
+      let drawCanvas = e.canvas;
+      if (e.type === 'ranged' && e.isTelegraphing && e.flashCanvas) {
+        const telegraphTime = currentTime - e.telegraphStart;
+        // Flash twice during telegraph duration
+        const flashCycle = (telegraphTime / FLASH_INTERVAL) % 2;
+        if (flashCycle < 1) {
+          drawCanvas = e.flashCanvas; // White flash
+        }
+      }
+
       for (let stripe = drawStartX; stripe <= drawEndX; stripe++) {
         if (transY < zBuf[stripe]) {
           const u = (stripe - (-spriteW / 2 + screenX)) / spriteW;
           const uu = e.flip ? (1 - u) : u;
-          const texX = Math.max(0, Math.min(e.canvas.width - 1, Math.floor(uu * e.canvas.width)));
+          const texX = Math.max(0, Math.min(drawCanvas.width - 1, Math.floor(uu * drawCanvas.width)));
           ctx.drawImage(
-            e.canvas,
-            texX, 0, 1, e.canvas.height,
+            drawCanvas,
+            texX, 0, 1, drawCanvas.height,
             stripe, drawStartY, 1, drawEndY - drawStartY + 1
           );
+        }
+      }
+    }
+  }
+
+  function drawShots(zBuf) {
+    if (!shotImg.complete || !enemyBlastImg.complete) return;
+    
+    // Draw player shots
+    const playerOrder = shots.map((s, i) => ({ i, d: (s.x - posX) ** 2 + (s.y - posY) ** 2, type: 'player' }));
+    // Draw enemy shots  
+    const enemyOrder = enemyShots.map((s, i) => ({ i, d: (s.x - posX) ** 2 + (s.y - posY) ** 2, type: 'enemy' }));
+    
+    // Combine and sort by distance
+    const allShots = [...playerOrder, ...enemyOrder].sort((a, b) => b.d - a.d);
+    
+    for (const o of allShots) {
+      const shots_array = o.type === 'player' ? shots : enemyShots;
+      const shot_img = o.type === 'player' ? shotImg : enemyBlastImg;
+      const s = shots_array[o.i];
+      
+      const relX = s.x - posX, relY = s.y - posY;
+      const invDet = 1.0 / (planeX * dirY - dirX * planeY);
+      const transX = invDet * ( dirY * relX - dirX * relY);
+      const transY = invDet * (-planeY * relX + planeX * relY);
+      if (transY <= 0.0001) continue;
+
+      const screenX = (W / 2) * (1 + transX / transY);
+      const spriteH = Math.abs((H / transY) * SHOT_SCALE);
+      const spriteW = spriteH;
+
+      const drawStartY = Math.max(0, ((-spriteH / 2 + HALF_H) | 0));
+      const drawEndY   = Math.min(H - 1, ((spriteH / 2 + HALF_H) | 0));
+      const drawStartX = Math.max(0, ((-spriteW / 2 + screenX) | 0));
+      const drawEndX   = Math.min(W - 1, ((spriteW / 2 + screenX) | 0));
+
+      for (let stripe = drawStartX; stripe <= drawEndX; stripe++) {
+        if (transY < zBuf[stripe]) {
+          const u = (stripe - (-spriteW / 2 + screenX)) / spriteW;
+          const texX = Math.max(0, Math.min(shot_img.width - 1, Math.floor(u * shot_img.width)));
+          ctx.drawImage(shot_img, texX, 0, 1, shot_img.height, stripe, drawStartY, 1, drawEndY - drawStartY + 1);
         }
       }
     }
@@ -1075,36 +1282,6 @@
   }
 
   let zBuf = null;
-
-  function drawShots(zBuf) {
-    if (!shotImg.complete) return;
-    const order = shots.map((s, i) => ({ i, d: (s.x - posX) ** 2 + (s.y - posY) ** 2 })).sort((a, b) => b.d - a.d);
-    for (const o of order) {
-      const s = shots[o.i];
-      const relX = s.x - posX, relY = s.y - posY;
-      const invDet = 1.0 / (planeX * dirY - dirX * planeY);
-      const transX = invDet * ( dirY * relX - dirX * relY);
-      const transY = invDet * (-planeY * relX + planeX * relY);
-      if (transY <= 0.0001) continue;
-
-      const screenX = (W / 2) * (1 + transX / transY);
-      const spriteH = Math.abs((H / transY) * SHOT_SCALE);
-      const spriteW = spriteH;
-
-      const drawStartY = Math.max(0, ((-spriteH / 2 + HALF_H) | 0));
-      const drawEndY   = Math.min(H - 1, ((spriteH / 2 + HALF_H) | 0));
-      const drawStartX = Math.max(0, ((-spriteW / 2 + screenX) | 0));
-      const drawEndX   = Math.min(W - 1, ((spriteW / 2 + screenX) | 0));
-
-      for (let stripe = drawStartX; stripe <= drawEndX; stripe++) {
-        if (transY < zBuf[stripe]) {
-          const u = (stripe - (-spriteW / 2 + screenX)) / spriteW;
-          const texX = Math.max(0, Math.min(shotImg.width - 1, Math.floor(u * shotImg.width)));
-          ctx.drawImage(shotImg, texX, 0, 1, shotImg.height, stripe, drawStartY, 1, drawEndY - drawStartY + 1);
-        }
-      }
-    }
-  }
 
   function loop() {
     const now = performance.now();
@@ -1260,6 +1437,7 @@
     clears = 0; maxDifficulty = 0.0;
     enemies.length = 0;
     shots.length = 0;
+    enemyShots.length = 0; // Clear enemy shots
     gameOverCountdown = -1;
     blockingWalls.clear(); // Clear all blocking walls
 
