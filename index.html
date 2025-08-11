@@ -199,6 +199,8 @@
   // --- Blaster overlay (HUD) ---
   const blasterImg = new Image();
   blasterImg.src = 'blaster.png';
+  const emptyBlasterImg = new Image();
+  emptyBlasterImg.src = 'empty.png';
   let BLASTER_SCALE = 5.0;
   const SWAY_DUR   = 0.35;
   const SWAY_AMP_X = 18;
@@ -207,19 +209,24 @@
   const BLASTER_BLEED_Y = 6;
   let swayClock = 0, lastYawSign = 0, lastBlasterRect = null;
 
+  // Blaster cooldown system
+  let blasterCooldown = 0.0;
+  const BLASTER_COOLDOWN_TIME = 1.0; // 1 second
+
   function drawBlaster(turning, moving, yawSign, clock) {
-    if (!blasterImg.complete) return;
+    const currentImg = blasterCooldown > 0 ? emptyBlasterImg : blasterImg;
+    if (!currentImg.complete) return;
     const u = ((clock % SWAY_DUR) / SWAY_DUR);
     const parab = (turning || moving) ? (4 * u * (1 - u)) : 0;
     const dx = -yawSign * SWAY_AMP_X * parab;
     const dy = (turning || moving ? 1 : 0) * SWAY_AMP_Y * parab;
-    const w = blasterImg.width  * BLASTER_SCALE;
-    const h = blasterImg.height * BLASTER_SCALE;
+    const w = currentImg.width  * BLASTER_SCALE;
+    const h = currentImg.height * BLASTER_SCALE;
     const baseX = W - w + BLASTER_BLEED_X;
     const baseY = H - h + BLASTER_BLEED_Y;
     const x = baseX + dx, y = baseY + dy;
     lastBlasterRect = { x, y, w, h };
-    ctx.drawImage(blasterImg, x, y, w, h);
+    ctx.drawImage(currentImg, x, y, w, h);
   }
 
   // --------------- Projectiles (sprite-based) ---------------
@@ -230,11 +237,17 @@
   const SHOT_SCALE = 0.5; // half size
 
   function spawnShot() {
+    // Check if blaster is on cooldown
+    if (blasterCooldown > 0) return;
+    
     const forward = 0.80, rightOff = 0.2;
     const rx = -dirY, ry = dirX; // right vector
     const sx = posX + dirX * forward + rx * rightOff;
     const sy = posY + dirY * forward + ry * rightOff;
     shots.push({ x: sx, y: sy, vx: dirX * SHOT_SPEED, vy: dirY * SHOT_SPEED, t: 0 });
+    
+    // Start cooldown
+    blasterCooldown = BLASTER_COOLDOWN_TIME;
   }
   window.addEventListener('mousedown', (e) => { if (e.button === 0) spawnShot(); });
 
@@ -606,6 +619,12 @@
         else if (dx === 1 && dy === 0) d = 1;
         else if (dx === 0 && dy === 1) d = 2;
         else if (dx === -1 && dy === 0) d = 3;
+        
+        // Check if the exit in this direction is blocked
+        if (d !== null && current_tile.exitBlocks && current_tile.exitBlocks.has(d)) {
+          return [null, null]; // Prevent transition if exit is blocked
+        }
+        
         return [t, d];
       }
     }
@@ -983,6 +1002,12 @@
     const now = performance.now();
     const dt = Math.min(0.05, (now - loop.lastNow) / 1000 || 0.016);
     loop.lastNow = now;
+
+    // Update blaster cooldown
+    if (blasterCooldown > 0) {
+      blasterCooldown -= dt;
+      if (blasterCooldown < 0) blasterCooldown = 0;
+    }
 
     // If game-over, show overlay and countdown to reset
     if (gameOverCountdown >= 0) {
