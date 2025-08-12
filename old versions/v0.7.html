@@ -41,6 +41,10 @@
     #btn-left  { top: 33%; left: 3%; }
     #btn-right { top: 33%; right: 3%; }
 
+    #shoot-btn { position: fixed; right: 3vw; bottom: 6vh; width: 18vw; height: 18vw; max-width: 160px; max-height: 160px; border-radius: 50%; background: rgba(0,255,0,0.2); border: 2px solid rgba(140,255,140,0.35); pointer-events: auto; user-select: none; -webkit-user-select: none; touch-action: none; }
+    #shoot-btn:active { background: rgba(0,255,0,0.28); }
+    .dpad-btn, #shoot-btn { outline: none; }
+
     /* --- Digital Joystick --- */
     #joystick {
       position: fixed;
@@ -85,7 +89,7 @@
 <body>
   <canvas id="canvas" width="960" height="600"></canvas>
   <div id="hud"></div>
-  <div id="help">Move: W/S, Strafe: A/D, Mouse: Look/aim, Reset: R</div>
+  <div id="help">Move: W/S, Look: A/D or ←/→, Reset: R</div>
   <div id="kills">0</div>
 
   <script>
@@ -103,288 +107,202 @@
   ctx.imageSmoothingEnabled = false;
 
   // --- Mobile detection ---
-  const MOBILE = /Mobi|Android|iPhone|iPad|iPod|Windows Phone|webOS/i.test(navigator.userAgent);
+  const MOBILE =
+    /Mobi|Android|iPhone|iPad|iPod|Windows Phone|webOS/i.test(navigator.userAgent) ||
+    (navigator.maxTouchPoints && navigator.maxTouchPoints > 1);
 
   if (MOBILE) {
     const help = document.getElementById('help');
-    help.textContent = 'Joystick: Move/strafe, Right side: Drag to look, Tap to shoot. (Desktop: W/S/A/D, Mouse to look, R to reset)';
-  } else {
-    document.getElementById('help').textContent = 'Move: W/S, Strafe: A/D, Mouse: Look/aim, Reset: R';
+    help.textContent = 'Touch: D-pad to move/turn, green button to shoot. (Desktop: W/S, A/D or ←/→, R to reset)';
   }
-
-  // ---------------- Input ----------------
-  const keys = new Set();
-  let pointerLocked = false;
-  let mouseLookDelta = 0;
-
-  // --- Mouse pointer lock for desktop look ---
-  function requestPointerLock() {
-    if (!MOBILE) {
-      // Use the standard requestPointerLock or browser-specific versions
-      const element = canvas;
-      const requestMethod = element.requestPointerLock || 
-                           element.mozRequestPointerLock || 
-                           element.webkitRequestPointerLock;
-      
-      if (requestMethod) {
-        requestMethod.call(element);
-      }
-    }
-  }
-  
-  // Request pointer lock on multiple user interactions
-  canvas.addEventListener('click', (e) => {
-    requestPointerLock();
-  });
-  canvas.addEventListener('mousedown', (e) => {
-    requestPointerLock();
-  });
-
-  // Support multiple pointer lock event names for browser compatibility
-  function onPointerLockChange() {
-    const locked = document.pointerLockElement === canvas ||
-                   document.mozPointerLockElement === canvas ||
-                   document.webkitPointerLockElement === canvas;
-    pointerLocked = locked;
-  }
-  
-  document.addEventListener('pointerlockchange', onPointerLockChange);
-  document.addEventListener('mozpointerlockchange', onPointerLockChange);
-  document.addEventListener('webkitpointerlockchange', onPointerLockChange);
-
-  // Mouse move for look (when pointer locked)
-  document.addEventListener('mousemove', (e) => {
-    if (pointerLocked) {
-      const movementX = e.movementX || e.mozMovementX || e.webkitMovementX || 0;
-      mouseLookDelta += movementX;
-    }
-  });
-
-  window.addEventListener('keydown', (e) => {
-    keys.add(e.code);
-    if (e.code === 'KeyR') start_new_run();
-    // Prevent default behavior for WASD keys
-    if (['KeyW', 'KeyA', 'KeyS', 'KeyD'].includes(e.code)) {
-      e.preventDefault();
-    }
-  });
-  window.addEventListener('keyup', (e) => {
-    keys.delete(e.code);
-  });
 
   // --- Touch control state ---
   const touchFlags = { fwd:false, back:false, left:false, right:false };
 
-  // --- Mobile look drag state ---
-  let mobileLookActive = false, lastTouchX = 0;
-  let rightSideTouchStart = 0; // Track when right side touch started
-  const TAP_THRESHOLD = 200; // Max time for a tap (in ms)
-  const DRAG_THRESHOLD = 10; // Min distance to consider it a drag (in pixels)
-  
-  if (MOBILE) {
-    const help = document.getElementById('help');
-    help.textContent = 'Joystick: Move/strafe, Right side: Drag to look, Tap to shoot. (Desktop: W/S/A/D, Mouse to look, R to reset)';
-    
-    // Touch-drag/tap on right side for look/shoot
-    document.addEventListener('touchstart', (e) => {
-      // Ignore if on joystick
-      if (e.target.closest('#joystick')) return;
-      
-      const touch = e.touches[0];
-      const screenMidX = window.innerWidth / 2;
-      
-      // Only handle touches on right side of screen
-      if (touch.clientX > screenMidX) {
-        mobileLookActive = true;
-        lastTouchX = touch.clientX;
-        rightSideTouchStart = performance.now();
-        e.preventDefault();
-      }
-    }, { passive: false });
-    
-    document.addEventListener('touchmove', (e) => {
-      if (!mobileLookActive) return;
-      const x = e.touches[0].clientX;
-      const dx = x - lastTouchX;
-      lastTouchX = x;
-      // Simulate mouse look delta
-      mouseLookDelta += dx * 1.5; // Sensitivity
-      e.preventDefault();
-    }, { passive: false });
-    
-    document.addEventListener('touchend', (e) => {
-      if (!mobileLookActive) return;
-      
-      // Check if this was a tap (short duration, minimal movement)
-      const touchDuration = performance.now() - rightSideTouchStart;
-      const totalDrag = Math.abs(mouseLookDelta);
-      
-      if (touchDuration < TAP_THRESHOLD && totalDrag < DRAG_THRESHOLD) {
-        // It's a tap - shoot!
-        spawnShot();
-      }
-      
-      mobileLookActive = false;
-      e.preventDefault();
-    }, { passive: false });
-    
-    document.addEventListener('touchcancel', (e) => {
-      mobileLookActive = false;
-    }, { passive: false });
-  } else {
-    document.getElementById('help').textContent = 'Move: W/S, Strafe: A/D, Mouse: Look/aim, Reset: R';
-  }
+  function createTouchUI() {
+    const ui = document.createElement('div');
+    ui.id = 'touch-ui';
 
+    // --- Digital Joystick ---
+    const joystick = document.createElement('div');
+    joystick.id = 'joystick';
+    joystick.style.position = 'fixed';
+    joystick.style.left = '3vw';
+    joystick.style.bottom = '4vh';
+    joystick.style.width = '28vw';
+    joystick.style.height = '28vw';
+    joystick.style.maxWidth = '220px';
+    joystick.style.maxHeight = '220px';
+    joystick.style.touchAction = 'none';
+    joystick.style.pointerEvents = 'auto';
+    joystick.style.display = 'flex';
+    joystick.style.alignItems = 'center';
+    joystick.style.justifyContent = 'center';
 
+    // Outer circle
+    const outer = document.createElement('div');
+    outer.style.position = 'absolute';
+    outer.style.left = '0';
+    outer.style.top = '0';
+    outer.style.width = '100%';
+    outer.style.height = '100%';
+    outer.style.background = 'rgba(128,128,128,0.20)';
+    outer.style.borderRadius = '50%';
+    outer.style.pointerEvents = 'none';
 
-  // --- Mobile joystick: 2D movement (forward/back/strafe) ---
-  // Overwrite joystick logic to provide 2D movement vector
-  if (MOBILE) {
-    function createTouchUI() {
-      const ui = document.createElement('div');
-      ui.id = 'touch-ui';
+    // Inner (thumb) circle
+    const inner = document.createElement('div');
+    inner.style.position = 'absolute';
+    inner.style.width = '38%';
+    inner.style.height = '38%';
+    inner.style.left = '31%';
+    inner.style.top = '31%';
+    inner.style.background = 'rgba(128,128,128,0.50)';
+    inner.style.borderRadius = '50%';
+    inner.style.pointerEvents = 'auto';
+    inner.style.touchAction = 'none';
+    inner.style.transition = 'left 0.08s, top 0.08s';
 
-      // --- Digital Joystick ---
-      const joystick = document.createElement('div');
-      joystick.id = 'joystick';
-      joystick.style.position = 'fixed';
-      joystick.style.left = '3vw';
-      joystick.style.bottom = '4vh';
-      joystick.style.width = '28vw';
-      joystick.style.height = '28vw';
-      joystick.style.maxWidth = '220px';
-      joystick.style.maxHeight = '220px';
-      joystick.style.touchAction = 'none';
-      joystick.style.pointerEvents = 'auto';
-      joystick.style.display = 'flex';
-      joystick.style.alignItems = 'center';
-      joystick.style.justifyContent = 'center';
+    joystick.appendChild(outer);
+    joystick.appendChild(inner);
+    ui.appendChild(joystick);
 
-      // Outer circle
-      const outer = document.createElement('div');
-      outer.style.position = 'absolute';
-      outer.style.left = '0';
-      outer.style.top = '0';
-      outer.style.width = '100%';
-      outer.style.height = '100%';
-      outer.style.background = 'rgba(128,128,128,0.20)';
-      outer.style.borderRadius = '50%';
-      outer.style.pointerEvents = 'none';
+    // --- Joystick logic ---
+    let joyActive = false, joyStart = null, joyCenter = null, joyRadius = null;
 
-      // Inner (thumb) circle
-      const inner = document.createElement('div');
-      inner.style.position = 'absolute';
-      inner.style.width = '38%';
-      inner.style.height = '38%';
+    function resetJoystick() {
       inner.style.left = '31%';
       inner.style.top = '31%';
-      inner.style.background = 'rgba(128,128,128,0.50)';
-      inner.style.borderRadius = '50%';
-      inner.style.pointerEvents = 'auto';
-      inner.style.touchAction = 'none';
-      inner.style.transition = 'left 0.08s, top 0.08s';
+      touchFlags.fwd = false;
+      touchFlags.back = false;
+      touchFlags.left = false;
+      touchFlags.right = false;
+    }
 
-      joystick.appendChild(outer);
-      joystick.appendChild(inner);
-      ui.appendChild(joystick);
-
-      // --- Joystick logic ---
-      let joyActive = false, joyStart = null, joyCenter = null, joyRadius = null;
-      let joyVec = { x: 0, y: 0 }; // 2D movement vector
-
-      function getJoyCenterAndRadius() {
-        const rect = joystick.getBoundingClientRect();
-        const cx = rect.left + rect.width / 2;
-        const cy = rect.top + rect.height / 2;
-        const r = rect.width / 2;
-        return { cx, cy, r, rect };
-      }
-
-      function resetJoystick() {
-        inner.style.left = '31%';
-        inner.style.top = '31%';
+    function setJoyFlagsFromAngle(angle, mag) {
+      // 8-way: Up, Up-Right, Right, Down-Right, Down, Down-Left, Left, Up-Left
+      // Threshold: only if mag > 0.22 (22% of radius)
+      if (mag < 0.22) {
         touchFlags.fwd = false;
         touchFlags.back = false;
         touchFlags.left = false;
         touchFlags.right = false;
-        joyVec.x = 0; joyVec.y = 0;
+        return;
       }
-
-      function updateJoystick(touch) {
-        if (!joyCenter) return;
-        const dx = touch.clientX - joyCenter.cx;
-        const dy = touch.clientY - joyCenter.cy;
-        const dist = Math.sqrt(dx * dx + dy * dy);
-        const maxDist = joyRadius * 0.78;
-        let ndx = dx, ndy = dy;
-        let mag = dist / joyRadius;
-        if (dist > maxDist) {
-          ndx = dx * maxDist / dist;
-          ndy = dy * maxDist / dist;
-          mag = maxDist / joyRadius;
-        }
-        // Move thumb
-        const left = 50 + (ndx / joyRadius) * 50 - 19;
-        const top = 50 + (ndy / joyRadius) * 50 - 19;
-        inner.style.left = `${left}%`;
-        inner.style.top = `${top}%`;
-        // 2D movement vector, normalized to [-1,1]
-        joyVec.x = ndx / joyRadius;
-        joyVec.y = ndy / joyRadius;
-        // Set flags for legacy code (not used for movement now)
-        touchFlags.fwd = joyVec.y < -0.22;
-        touchFlags.back = joyVec.y > 0.22;
-        touchFlags.left = joyVec.x < -0.22;
-        touchFlags.right = joyVec.x > 0.22;
+      // Angle: 0 = up, PI/4 = up-right, PI/2 = right, etc.
+      // Map to WASD
+      // Up: -22.5° to 22.5° (337.5° to 22.5°)
+      // Up-Right: 22.5° to 67.5°
+      // Right: 67.5° to 112.5°
+      // Down-Right: 112.5° to 157.5°
+      // Down: 157.5° to 202.5°
+      // Down-Left: 202.5° to 247.5°
+      // Left: 247.5° to 292.5°
+      // Up-Left: 292.5° to 337.5°
+      // angle in radians, 0 = up, increases clockwise
+      let deg = angle * 180 / Math.PI;
+      if (deg < 0) deg += 360;
+      // Reset
+      touchFlags.fwd = false;
+      touchFlags.back = false;
+      touchFlags.left = false;
+      touchFlags.right = false;
+      if ((deg >= 337.5 || deg < 22.5)) { // Up
+        touchFlags.fwd = true;
+      } else if (deg >= 22.5 && deg < 67.5) { // Up-Right
+        touchFlags.fwd = true; touchFlags.right = true;
+      } else if (deg >= 67.5 && deg < 112.5) { // Right
+        touchFlags.right = true;
+      } else if (deg >= 112.5 && deg < 157.5) { // Down-Right
+        touchFlags.back = true; touchFlags.right = true;
+      } else if (deg >= 157.5 && deg < 202.5) { // Down
+        touchFlags.back = true;
+      } else if (deg >= 202.5 && deg < 247.5) { // Down-Left
+        touchFlags.back = true; touchFlags.left = true;
+      } else if (deg >= 247.5 && deg < 292.5) { // Left
+        touchFlags.left = true;
+      } else if (deg >= 292.5 && deg < 337.5) { // Up-Left
+        touchFlags.fwd = true; touchFlags.left = true;
       }
-
-      // Joystick event listeners (unchanged)
-      inner.addEventListener('touchstart', (e) => {
-        e.preventDefault();
-        joyActive = true;
-        joyCenter = getJoyCenterAndRadius();
-        joyRadius = joyCenter.r;
-        updateJoystick(e.touches[0]);
-      }, { passive: false });
-
-      joystick.addEventListener('touchstart', (e) => {
-        e.preventDefault();
-        joyActive = true;
-        joyCenter = getJoyCenterAndRadius();
-        joyRadius = joyCenter.r;
-        updateJoystick(e.touches[0]);
-      }, { passive: false });
-
-      joystick.addEventListener('touchmove', (e) => {
-        if (!joyActive) return;
-        e.preventDefault();
-        updateJoystick(e.touches[0]);
-      }, { passive: false });
-
-      joystick.addEventListener('touchend', (e) => {
-        e.preventDefault();
-        joyActive = false;
-        resetJoystick();
-      }, { passive: false });
-
-      joystick.addEventListener('touchcancel', (e) => {
-        e.preventDefault();
-        joyActive = false;
-        resetJoystick();
-      }, { passive: false });
-
-      resetJoystick();
-
-      // No shoot button - removed
-
-      document.body.appendChild(ui);
-      window.addEventListener('contextmenu', (e) => e.preventDefault());
-
-      // Expose joyVec globally for movement
-      window._mobileJoyVec = joyVec;
     }
-    createTouchUI();
+
+    function getJoyCenterAndRadius() {
+      const rect = joystick.getBoundingClientRect();
+      const cx = rect.left + rect.width / 2;
+      const cy = rect.top + rect.height / 2;
+      const r = rect.width / 2;
+      return { cx, cy, r, rect };
+    }
+
+    function updateJoystick(touch) {
+      if (!joyCenter) return;
+      const dx = touch.clientX - joyCenter.cx;
+      const dy = touch.clientY - joyCenter.cy;
+      const dist = Math.sqrt(dx * dx + dy * dy);
+      const maxDist = joyRadius * 0.78; // thumb can move up to 78% of radius
+      let ndx = dx, ndy = dy;
+      let mag = dist / joyRadius;
+      if (dist > maxDist) {
+        ndx = dx * maxDist / dist;
+        ndy = dy * maxDist / dist;
+        mag = maxDist / joyRadius;
+      }
+      // Move thumb
+      const left = 50 + (ndx / joyRadius) * 50 - 19; // 19 = half of 38%
+      const top = 50 + (ndy / joyRadius) * 50 - 19;
+      inner.style.left = `${left}%`;
+      inner.style.top = `${top}%`;
+      // Angle: 0 = up
+      const angle = Math.atan2(ndx, -ndy);
+      setJoyFlagsFromAngle(angle, mag);
+    }
+
+    inner.addEventListener('touchstart', (e) => {
+      e.preventDefault();
+      joyActive = true;
+      joyCenter = getJoyCenterAndRadius();
+      joyRadius = joyCenter.r;
+      updateJoystick(e.touches[0]);
+    }, { passive: false });
+
+    joystick.addEventListener('touchstart', (e) => {
+      e.preventDefault();
+      joyActive = true;
+      joyCenter = getJoyCenterAndRadius();
+      joyRadius = joyCenter.r;
+      updateJoystick(e.touches[0]);
+    }, { passive: false });
+
+    joystick.addEventListener('touchmove', (e) => {
+      if (!joyActive) return;
+      e.preventDefault();
+      updateJoystick(e.touches[0]);
+    }, { passive: false });
+
+    joystick.addEventListener('touchend', (e) => {
+      e.preventDefault();
+      joyActive = false;
+      resetJoystick();
+    }, { passive: false });
+
+    joystick.addEventListener('touchcancel', (e) => {
+      e.preventDefault();
+      joyActive = false;
+      resetJoystick();
+    }, { passive: false });
+
+    resetJoystick();
+
+    // --- Shoot button (unchanged) ---
+    const shoot = document.createElement('button');
+    shoot.id = 'shoot-btn'; shoot.setAttribute('aria-label', 'Shoot');
+    shoot.addEventListener('touchstart', (e) => { e.preventDefault(); spawnShot(); }, { passive:false });
+
+    ui.appendChild(shoot);
+    document.body.appendChild(ui);
+    window.addEventListener('contextmenu', (e) => e.preventDefault());
   }
+  if (MOBILE) createTouchUI();
 
   // --- Blaster overlay (HUD) ---
   const blasterImg = new Image();
@@ -523,14 +441,14 @@
     for (const side of tile.open_sides) {
       const cx = ox + (TILE / 2) | 0;
       const cy = oy + (TILE / 2) | 0;
-      const r = (DOOR_W / 2) | 0;
+      const half = (DOOR_W / 2) | 0;
       const BLOCK_OFFSET = 2; // Distance outside the room
       
       let blockPositions = [];
       
       if (side === 0) { // North exit
         const blockY = oy - BLOCK_OFFSET;
-        for (let i = -r; i <= r; i++) {
+        for (let i = -half; i <= half; i++) {
           const blockX = cx + i;
           if (blockX >= 0 && blockX < WORLD_W && blockY >= 0 && blockY < WORLD_H) {
             blockPositions.push({x: blockX, y: blockY, side});
@@ -538,7 +456,7 @@
         }
       } else if (side === 2) { // South exit
         const blockY = oy + TILE - 1 + BLOCK_OFFSET;
-        for (let i = -r; i <= r; i++) {
+        for (let i = -half; i <= half; i++) {
           const blockX = cx + i;
           if (blockX >= 0 && blockX < WORLD_W && blockY >= 0 && blockY < WORLD_H) {
             blockPositions.push({x: blockX, y: blockY, side});
@@ -546,7 +464,7 @@
         }
       } else if (side === 1) { // East exit
         const blockX = ox + TILE - 1 + BLOCK_OFFSET;
-        for (let i = -r; i <= r; i++) {
+        for (let i = -half; i <= half; i++) {
           const blockY = cy + i;
           if (blockX >= 0 && blockX < WORLD_W && blockY >= 0 && blockY < WORLD_H) {
             blockPositions.push({x: blockX, y: blockY, side});
@@ -554,7 +472,7 @@
         }
       } else if (side === 3) { // West exit
         const blockX = ox - BLOCK_OFFSET;
-        for (let i = -r; i <= r; i++) {
+        for (let i = -half; i <= half; i++) {
           const blockY = cy + i;
           if (blockX >= 0 && blockX < WORLD_W && blockY >= 0 && blockY < WORLD_H) {
             blockPositions.push({x: blockX, y: blockY, side});
@@ -639,7 +557,6 @@
       this.spawned = false;        // new: prevents multiple spawn waves
       this.exitBlocks = new Map(); // side -> true if blocked
       this.hasActiveEnemies = false; // tracks if enemies are active in this tile
-      this.variety = null; // 'center' or 'corners' for room3/dead
     }
   }
 
@@ -690,13 +607,7 @@
 
     const [wid, color] = next_wall_id_with_color();
     const label = `${kind} (${exits_label})`;
-    const tile = new Tile(orient_dir, kind, open_sides, wid, color, label);
-
-    // Assign room variety for room3/dead (not for start room)
-    if ((kind === 'room3' || kind === 'dead')) {
-      tile.variety = (Math.random() < 0.5) ? 'center' : 'corners';
-    }
-    return tile;
+    return new Tile(orient_dir, kind, open_sides, wid, color, label);
   }
 
   function empty_world() {
@@ -735,33 +646,6 @@
 
   function build_room(ox, oy, tile) {
     draw_border_box(ox, oy, tile.wall_id);
-    // --- Add pillars for cover ---
-    if (tile.variety === 'center') {
-      // Center 5x5 pillar
-      const px = (ox + (TILE/2)|0) - 2;
-      const py = (oy + (TILE/2)|0) - 2;
-      for (let y = py; y < py + 5; y++) {
-        for (let x = px; x < px + 5; x++) {
-          WORLD[y][x] = tile.wall_id;
-        }
-      }
-    } else if (tile.variety === 'corners') {
-      // Four 2x2 pillars near corners, moved 2 units closer to center
-      // Offset from wall: 4 tiles (was 2)
-      const offsets = [
-        [4, 4],
-        [TILE - 6, 4],
-        [4, TILE - 6],
-        [TILE - 6, TILE - 6]
-      ];
-      for (const [dx, dy] of offsets) {
-        for (let y = oy + dy; y < oy + dy + 2; y++) {
-          for (let x = ox + dx; x < ox + dx + 2; x++) {
-            WORLD[y][x] = tile.wall_id;
-          }
-        }
-      }
-    }
     for (const side of tile.open_sides) carve_door(side, ox, oy);
   }
 
@@ -1017,21 +901,15 @@
   }
 
   // Replace single spawn helper with multi-point provider
-  function getEnemySpawnPoints(tile_origin, tile) {
+  function getEnemySpawnPoints(tile_origin) {
     const [ox, oy] = tile_origin;
-    // 5 spawn points: center and 4 corners (moved further to corners)
-    const points = [
+    return [
       [ox + TILE * 0.50, oy + TILE * 0.50], // center
-      [ox + TILE * 0.15, oy + TILE * 0.15], // moved from 0.25 to 0.15
-      [ox + TILE * 0.85, oy + TILE * 0.15], // moved from 0.75 to 0.85
-      [ox + TILE * 0.15, oy + TILE * 0.85], // moved from 0.25 to 0.85
-      [ox + TILE * 0.85, oy + TILE * 0.85], // moved from 0.75 to 0.85
+      [ox + TILE * 0.25, oy + TILE * 0.25],
+      [ox + TILE * 0.75, oy + TILE * 0.25],
+      [ox + TILE * 0.25, oy + TILE * 0.75],
+      [ox + TILE * 0.75, oy + TILE * 0.75],
     ];
-    // If center pillar, remove center spawn
-    if (tile && tile.variety === 'center') {
-      return points.slice(1); // corners only
-    }
-    return points;
   }
 
   let enemies = []; // replaces single 'enemy'
@@ -1044,11 +922,11 @@
 
     maxDifficulty = Math.min(1.0, clears / 20.0);
 
-    // Decide how many enemies (1–4 for center pillar, 1–5 for corners)
-    let pts = getEnemySpawnPoints(tile_positions.get(tile), tile);
-    let maxEnemies = pts.length;
-    const count = 1 + ((Math.random() * maxEnemies) | 0);
+    // Decide how many enemies (1–4)
+    const count = 1 + ((Math.random() * 4) | 0);
 
+    // Unique spawn points
+    const pts = getEnemySpawnPoints(tile_positions.get(tile));
     // Fisher–Yates shuffle
     for (let i = pts.length - 1; i > 0; i--) {
       const j = (Math.random() * (i + 1)) | 0;
@@ -1068,9 +946,8 @@
       }
       
       if (isRanged) {
-        // Ranged enemy: progression based on kills beyond 20
-        // Start at blue when first unlocked, progress to red over next 40 kills
-        const rangedProgress = Math.max(0, (kills - 20) / 40.0); // 0 to 1 over kills 20-60
+        // Ranged enemy: start from blue difficulty but with own progression
+        const rangedProgress = Math.max(0, (maxDifficulty - 1.0) * 3); // Scale after normal enemies max out
         const difficulty = Math.min(1.0, rangedProgress);
         const color = enemyColorForDifficulty(difficulty);
         const fireRate = getRangedEnemyFireRate(difficulty);
@@ -1390,6 +1267,14 @@
     maybeSpawnEnemiesFor(current_tile);
   }
 
+  // ---------------- Input ----------------
+  const keys = new Set();
+  window.addEventListener('keydown', (e) => {
+    keys.add(e.code);
+    if (e.code === 'KeyR') start_new_run();
+  });
+  window.addEventListener('keyup', (e) => keys.delete(e.code));
+
   // ---------------- Rendering ----------------
   function fillRectColor(x, y, w, h, rgb) {
     ctx.fillStyle = `rgb(${rgb[0]},${rgb[1]},${rgb[2]})`;
@@ -1427,17 +1312,12 @@
       return;
     }
 
-    // --- Mouse look (desktop) or mobile look drag ---
+    // Rotation (keyboard + touch)
     let rot = 0.0;
-    if (!MOBILE && mouseLookDelta !== 0) {
-      rot += (mouseLookDelta * 0.0025); // Sensitivity
-      mouseLookDelta = 0;
-    }
-    if (MOBILE && mouseLookDelta !== 0) {
-      rot += (mouseLookDelta * 0.005); // Mobile sensitivity
-      mouseLookDelta = 0;
-    }
-
+    const turnRight = keys.has('KeyD') || keys.has('ArrowRight') || (MOBILE && touchFlags.right);
+    const turnLeft  = keys.has('KeyA') || keys.has('ArrowLeft')  || (MOBILE && touchFlags.left);
+    if (turnRight) rot += ROT_SPEED * dt * 3;
+    if (turnLeft)  rot -= ROT_SPEED * dt * 3;
     if (rot !== 0.0) {
       const cos = Math.cos(rot), sin = Math.sin(rot);
       const oldDirX = dirX;
@@ -1448,53 +1328,17 @@
       planeY = oldPlaneX * sin + planeY * cos;
     }
 
-    // --- Movement ---
-    let move = MOVE_SPEED * dt * 3;
-    let moveX = 0, moveY = 0;
-    let isMoving = false;
-
-    // Desktop: WASD (always check, not just when !MOBILE)
-    // W/S: forward/back
-    if (keys.has('KeyW')) {
-      moveX += dirX;
-      moveY += dirY;
-      isMoving = true;
+    // Movement (keyboard + touch)
+    const move = MOVE_SPEED * dt * 3;
+    const goFwd  = keys.has('KeyW') || (MOBILE && touchFlags.fwd);
+    const goBack = keys.has('KeyS') || (MOBILE && touchFlags.back);
+    if (goFwd) {
+      const nx = posX + dirX * move, ny = posY + dirY * move;
+      if (can_move(nx, posY)) posX = nx;
+      if (can_move(posX, ny)) posY = ny;
     }
-    if (keys.has('KeyS')) {
-      moveX -= dirX;
-      moveY -= dirY;
-      isMoving = true;
-    }
-    // A/D: strafe left/right (perpendicular to facing) - FIXED SWAP
-    if (keys.has('KeyA')) {
-      moveX += dirY;  // Changed from -dirY
-      moveY += -dirX; // Changed from dirX
-      isMoving = true;
-    }
-    if (keys.has('KeyD')) {
-      moveX += -dirY; // Changed from dirY
-      moveY += dirX;  // Changed from -dirX
-      isMoving = true;
-    }
-
-    // Mobile joystick movement (if on mobile and joystick active)
-    if (MOBILE && window._mobileJoyVec) {
-      const jx = window._mobileJoyVec.x, jy = window._mobileJoyVec.y;
-      if (Math.abs(jx) > 0.1 || Math.abs(jy) > 0.1) {
-        isMoving = true;
-        // Add to existing movement from keyboard (for debugging on desktop)
-        const mag = Math.max(1, Math.sqrt(jx * jx + jy * jy));
-        moveX += (dirX * -jy + -dirY * jx) / mag;
-        moveY += (dirY * -jy + dirX * jx) / mag;
-      }
-    }
-
-    // Apply movement if any input detected
-    if (isMoving) {
-      // Normalize if moving diagonally
-      const mag = Math.max(1, Math.sqrt(moveX * moveX + moveY * moveY));
-      const nx = posX + (moveX / mag) * move;
-      const ny = posY + (moveY / mag) * move;
+    if (goBack) {
+      const nx = posX - dirX * move, ny = posY - dirY * move;
       if (can_move(nx, posY)) posX = nx;
       if (can_move(posX, ny)) posY = ny;
     }
@@ -1555,7 +1399,6 @@
     }
 
     // Sprites
-   
     drawEnemies(zBuf); // replaced drawEnemy
     drawShots(zBuf);
 
@@ -1564,17 +1407,11 @@
 
     // Blaster sway
     const turning = (rot !== 0);
-   
-    const moving = isMoving;
+    const moving  = (keys.has('KeyW') || keys.has('KeyS') || (MOBILE && (touchFlags.fwd || touchFlags.back)));
     let yawSign = 0;
     if (turning) yawSign = rot > 0 ? 1 : -1;
-    if (turning || moving) { 
-      swayClock += dt; 
-      if (yawSign !== 0) lastYawSign = yawSign; 
-    } else { 
-      swayClock = 0; 
-      lastYawSign = 0; 
-    }
+    if (turning || moving) { swayClock += dt; if (yawSign !== 0) lastYawSign = yawSign; }
+    else { swayClock = 0; lastYawSign = 0; }
     drawBlaster(turning, moving, lastYawSign, swayClock);
 
     requestAnimationFrame(loop);
@@ -1582,7 +1419,7 @@
   loop.lastNow = performance.now();
 
   function init() {
-       W = canvas.width; H = canvas.height; HALF_H = (H/2)|0;
+    W = canvas.width; H = canvas.height; HALF_H = (H/2)|0;
     zBuf = new Float32Array(W);
     start_new_run();
     requestAnimationFrame(loop);
@@ -1608,7 +1445,6 @@
     current_tile.kind = 'start';
     current_tile.open_sides = new Set([1,0,2]);
     current_tile.isStart = true;
-    current_tile.variety = null; // Explicitly prevent pillars in start room
     current_tile.label = 'start (no rear door)';
     current_tile.spawned = true; // force no spawn in start room
 
@@ -1628,5 +1464,3 @@
   </script>
 </body>
 </html>
-
-
