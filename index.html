@@ -176,66 +176,100 @@
   const touchFlags = { fwd:false, back:false, left:false, right:false };
 
   // --- Mobile look drag state ---
-  let mobileLookActive = false, lastTouchX = 0;
-  let rightSideTouchStart = 0; // Track when right side touch started
-  const TAP_THRESHOLD = 200; // Max time for a tap (in ms)
-  const DRAG_THRESHOLD = 10; // Min distance to consider it a drag (in pixels)
-  
+  // let mobileLookActive = false, lastTouchX = 0;
+  // let rightSideTouchStart = 0; // Track when right side touch started
+  // const TAP_THRESHOLD = 200; // Max time for a tap (in ms)
+  // const DRAG_THRESHOLD = 10; // Min distance to consider it a drag (in pixels)
+
+  // --- Multi-touch tracking for mobile controls ---
+  let activeTouches = {}; // id -> { type: 'joystick'|'look', ... }
+  const TAP_THRESHOLD = 200;
+  const DRAG_THRESHOLD = 10;
+
   if (MOBILE) {
     const help = document.getElementById('help');
     help.textContent = 'Joystick: Move/strafe, Right side: Drag to look, Tap to shoot. (Desktop: W/S/A/D, Mouse to look, R to reset)';
-    
-    // Touch-drag/tap on right side for look/shoot
+
+    // Helper to get joystick DOM element
+    function getJoystickElem() {
+      return document.getElementById('joystick');
+    }
+
+    // --- Touchstart: assign each touch to joystick or look/shoot ---
     document.addEventListener('touchstart', (e) => {
-      // Ignore if on joystick
-      if (e.target.closest('#joystick')) return;
-      
-      const touch = e.touches[0];
-      const screenMidX = window.innerWidth / 2;
-      
-      // Only handle touches on right side of screen
-      if (touch.clientX > screenMidX) {
-        mobileLookActive = true;
-        lastTouchX = touch.clientX;
-        rightSideTouchStart = performance.now();
-        e.preventDefault();
+      for (let i = 0; i < e.changedTouches.length; i++) {
+        const touch = e.changedTouches[i];
+        const id = touch.identifier;
+        const joystick = getJoystickElem();
+        const target = document.elementFromPoint(touch.clientX, touch.clientY);
+        const screenMidX = window.innerWidth / 2;
+
+        if (joystick && target && joystick.contains(target)) {
+          // Joystick touch
+          activeTouches[id] = {
+            type: 'joystick',
+            lastX: touch.clientX,
+            lastY: touch.clientY
+          };
+          // Joystick logic will be handled in joystick event listeners
+        } else if (touch.clientX > screenMidX) {
+          // Right side: look/shoot
+          activeTouches[id] = {
+            type: 'look',
+            startX: touch.clientX,
+            lastX: touch.clientX,
+            totalDrag: 0,
+            startTime: performance.now()
+          };
+        }
       }
     }, { passive: false });
-    
+
+    // --- Touchmove: handle look/aim for right-side touches ---
     document.addEventListener('touchmove', (e) => {
-      if (!mobileLookActive) return;
-      const x = e.touches[0].clientX;
-      const dx = x - lastTouchX;
-      lastTouchX = x;
-      // Simulate mouse look delta
-      mouseLookDelta += dx * 1.5; // Sensitivity
-      e.preventDefault();
-    }, { passive: false });
-    
-    document.addEventListener('touchend', (e) => {
-      if (!mobileLookActive) return;
-      
-      // Check if this was a tap (short duration, minimal movement)
-      const touchDuration = performance.now() - rightSideTouchStart;
-      const totalDrag = Math.abs(mouseLookDelta);
-      
-      if (touchDuration < TAP_THRESHOLD && totalDrag < DRAG_THRESHOLD) {
-        // It's a tap - shoot!
-        spawnShot();
+      for (let i = 0; i < e.changedTouches.length; i++) {
+        const touch = e.changedTouches[i];
+        const id = touch.identifier;
+        const t = activeTouches[id];
+        if (!t) continue;
+        if (t.type === 'look') {
+          const dx = touch.clientX - t.lastX;
+          t.totalDrag += Math.abs(dx);
+          t.lastX = touch.clientX;
+          // Simulate mouse look delta
+          mouseLookDelta += dx * 1.5;
+          e.preventDefault();
+        }
+        // Joystick handled in joystick's own listeners
       }
-      
-      mobileLookActive = false;
-      e.preventDefault();
     }, { passive: false });
-    
+
+    // --- Touchend: handle tap-to-shoot for right-side touches ---
+    document.addEventListener('touchend', (e) => {
+      for (let i = 0; i < e.changedTouches.length; i++) {
+        const touch = e.changedTouches[i];
+        const id = touch.identifier;
+        const t = activeTouches[id];
+        if (!t) continue;
+        if (t.type === 'look') {
+          const duration = performance.now() - t.startTime;
+          if (duration < TAP_THRESHOLD && t.totalDrag < DRAG_THRESHOLD) {
+            spawnShot();
+          }
+        }
+        delete activeTouches[id];
+      }
+    }, { passive: false });
+
     document.addEventListener('touchcancel', (e) => {
-      mobileLookActive = false;
+      for (let i = 0; i < e.changedTouches.length; i++) {
+        const id = e.changedTouches[i].identifier;
+        delete activeTouches[id];
+      }
     }, { passive: false });
   } else {
     document.getElementById('help').textContent = 'Move: W/S, Strafe: A/D, Mouse: Look/aim, Reset: R';
   }
-
-
 
   // --- Mobile joystick: 2D movement (forward/back/strafe) ---
   // Overwrite joystick logic to provide 2D movement vector
@@ -291,6 +325,7 @@
       // --- Joystick logic ---
       let joyActive = false, joyStart = null, joyCenter = null, joyRadius = null;
       let joyVec = { x: 0, y: 0 }; // 2D movement vector
+      let joyTouchId = null;
 
       function getJoyCenterAndRadius() {
         const rect = joystick.getBoundingClientRect();
@@ -308,6 +343,8 @@
         touchFlags.left = false;
         touchFlags.right = false;
         joyVec.x = 0; joyVec.y = 0;
+        joyActive = false;
+        joyTouchId = null;
       }
 
       function updateJoystick(touch) {
@@ -338,44 +375,71 @@
         touchFlags.right = joyVec.x > 0.22;
       }
 
-      // Joystick event listeners (unchanged)
+      // Joystick event listeners (multi-touch aware)
       inner.addEventListener('touchstart', (e) => {
         e.preventDefault();
+        if (joyActive) return;
+        const touch = e.changedTouches[0];
         joyActive = true;
+        joyTouchId = touch.identifier;
         joyCenter = getJoyCenterAndRadius();
         joyRadius = joyCenter.r;
-        updateJoystick(e.touches[0]);
+        updateJoystick(touch);
       }, { passive: false });
 
       joystick.addEventListener('touchstart', (e) => {
         e.preventDefault();
-        joyActive = true;
-        joyCenter = getJoyCenterAndRadius();
-        joyRadius = joyCenter.r;
-        updateJoystick(e.touches[0]);
+        // Find the first changed touch not already assigned
+        for (let i = 0; i < e.changedTouches.length; i++) {
+          const touch = e.changedTouches[i];
+          if (!joyActive) {
+            joyActive = true;
+            joyTouchId = touch.identifier;
+            joyCenter = getJoyCenterAndRadius();
+            joyRadius = joyCenter.r;
+            updateJoystick(touch);
+            break;
+          }
+        }
       }, { passive: false });
 
       joystick.addEventListener('touchmove', (e) => {
         if (!joyActive) return;
-        e.preventDefault();
-        updateJoystick(e.touches[0]);
+        // Find the touch with the joystick's id
+        for (let i = 0; i < e.touches.length; i++) {
+          const touch = e.touches[i];
+          if (touch.identifier === joyTouchId) {
+            e.preventDefault();
+            updateJoystick(touch);
+            break;
+          }
+        }
       }, { passive: false });
 
       joystick.addEventListener('touchend', (e) => {
-        e.preventDefault();
-        joyActive = false;
-        resetJoystick();
+        // If the joystick's touch ended, reset
+        for (let i = 0; i < e.changedTouches.length; i++) {
+          const touch = e.changedTouches[i];
+          if (touch.identifier === joyTouchId) {
+            e.preventDefault();
+            resetJoystick();
+            break;
+          }
+        }
       }, { passive: false });
 
       joystick.addEventListener('touchcancel', (e) => {
-        e.preventDefault();
-        joyActive = false;
-        resetJoystick();
+        for (let i = 0; i < e.changedTouches.length; i++) {
+          const touch = e.changedTouches[i];
+          if (touch.identifier === joyTouchId) {
+            e.preventDefault();
+            resetJoystick();
+            break;
+          }
+        }
       }, { passive: false });
 
       resetJoystick();
-
-      // No shoot button - removed
 
       document.body.appendChild(ui);
       window.addEventListener('contextmenu', (e) => e.preventDefault());
