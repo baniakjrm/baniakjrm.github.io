@@ -1151,28 +1151,28 @@
 
   // Ranged enemy constants
   const RANGED_FIRE_RATES = {
-    blue: 3.0,   // Fire every 3 seconds
-    green: 2.0,  // Fire every 2 seconds  
+    green: 3.0,  // Fire every 3 seconds
+    blue: 2.0,   // Fire every 2 seconds  
     red: 1.0     // Fire every 1 second
   };
   const TELEGRAPH_DURATION = 0.3; // Flash duration before firing
   const FLASH_INTERVAL = 0.1; // Flash on/off interval
 
-  // Color & speed mapping (d in [0,1]): Blue->Green->Red
+  // Color & speed mapping (d in [0,1]): Green->Blue->Red
   function enemyColorForDifficulty(d) {
     if (d < 0.5) {
       const t = d / 0.5; // 0→1
       return [
         0,
-        Math.round(180 + 75 * t), // G: 180→255
-        Math.round(255 * (1 - t)) // B: 255→0
+        Math.round(255 * (1 - t)), // G: 255→0
+        Math.round(255 * t)        // B: 0→255
       ];
     } else {
-      const t = (d - 0.5) / 0.5;
+      const t = (d - 0.5) / 0.5; // 0→1
       return [
         Math.round(255 * t),      // R: 0→255
-        Math.round(255 * (1 - t)),// G: 255→0
-        0
+        0,
+        Math.round(255 * (1 - t)) // B: 255→0
       ];
     }
   }
@@ -1181,8 +1181,8 @@
   }
 
   function getRangedEnemyFireRate(difficulty) {
-    if (difficulty < 0.33) return RANGED_FIRE_RATES.blue;
-    if (difficulty < 0.66) return RANGED_FIRE_RATES.green;
+    if (difficulty < 0.33) return RANGED_FIRE_RATES.green;
+    if (difficulty < 0.66) return RANGED_FIRE_RATES.blue;
     return RANGED_FIRE_RATES.red;
   }
 
@@ -1335,12 +1335,12 @@
         // Valid spawn location found, create enemy
         if (isRanged) {
           // Ranged enemy progression: random difficulty based on rooms cleared
-          // Blue (0-0.5): rooms 0-12, Green (0.5-1.0): rooms 12-24, Red (1.0): rooms 24+
+          // Green (0-0.5): rooms 0-12, Blue (0.5-1.0): rooms 12-24, Red (1.0): rooms 24+
           let maxRangedDifficulty = 0;
           if (roomsCleared >= 24) {
-            maxRangedDifficulty = 1.0; // Full range: blue to red
+            maxRangedDifficulty = 1.0; // Full range: green to red
           } else if (roomsCleared >= 12) {
-            maxRangedDifficulty = 0.5; // Blue to green only
+            maxRangedDifficulty = 0.5; // Green to blue only
           } else {
             return null; // No ranged enemies before room 12
           }
@@ -1352,6 +1352,8 @@
           const tint = makeTintedEnemyCanvas(color, true);
           const flashCanvas = makeWhiteFlashCanvas(true);
           
+          // Prevent firing for first 3 seconds after spawn
+          const now = performance.now() / 1000;
           return {
             tile,
             x,
@@ -1365,14 +1367,14 @@
             flashCanvas,
             state: 'alive',
             type: 'ranged',
-            lastShotTime: 0,
+            lastShotTime: now + 3.0, // <-- cannot fire for first 3 seconds
             fireRate,
             telegraphStart: -1,
             isTelegraphing: false
           };
         } else {
           // Normal enemy progression: random difficulty based on rooms cleared
-          // Max difficulty reaches 1.0 at 12 rooms cleared
+          // Max difficulty reaches 1.0 at 12 rooms cleared (green to red progression)
           const maxNormalDifficulty = Math.min(1.0, roomsCleared / 12.0);
           const difficulty = Math.random() * Math.max(0.05, maxNormalDifficulty);
           const color = enemyColorForDifficulty(difficulty);
