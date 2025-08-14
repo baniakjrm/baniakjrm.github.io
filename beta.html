@@ -103,9 +103,69 @@
       touch-action: none;
       transition: left 0.08s, top 0.08s;
     }
+
+    /* --- Control selection screen --- */
+    #control-selection {
+      position: fixed;
+      inset: 0;
+      background: #000;
+      display: flex;
+      flex-direction: column;
+      align-items: center;
+      justify-content: center;
+      z-index: 1000;
+      color: #fff;
+      font-family: system-ui, Segoe UI, Roboto, Helvetica, Arial, sans-serif;
+    }
+
+    #control-selection h1 {
+      font-size: 36px;
+      margin-bottom: 40px;
+      color: #ff6363;
+    }
+
+    #control-selection .control-option {
+      background: rgba(60,60,60,0.85);
+      border: 2px solid rgba(200,200,200,0.4);
+      border-radius: 12px;
+      padding: 20px 40px;
+      margin: 15px;
+      font-size: 20px;
+      color: #fff;
+      cursor: pointer;
+      transition: all 0.2s ease;
+      min-width: 300px;
+      text-align: center;
+    }
+
+    #control-selection .control-option:hover {
+      background: rgba(80,80,80,0.9);
+      border-color: rgba(255,255,255,0.6);
+      transform: translateY(-2px);
+    }
+
+    #control-selection .control-option:active {
+      transform: translateY(0);
+    }
+
+    #control-selection.hidden {
+      display: none;
+    }
   </style>
 </head>
 <body>
+  <!-- Control selection screen -->
+  <div id="control-selection">
+    <h1>Attack of The Kruptins</h1>
+    <div style="font-size: 24px; margin-bottom: 30px;">Select a Control Scheme:</div>
+    <div class="control-option" onclick="selectControls('desktop')">
+      Keyboard and Mouse
+    </div>
+    <div class="control-option" onclick="selectControls('mobile')">
+      Touchscreen
+    </div>
+  </div>
+
   <canvas id="canvas" width="960" height="600"></canvas>
   <div id="hud"></div>
   <div id="help">Move: W/S, Strafe: A/D, Mouse: Look/aim, Reset: R</div>
@@ -119,6 +179,57 @@
   // (formerly "Infinite Rainbow Labyrinth")
   // ------------------------------------------------------------
 
+  // ---------------- Control selection ----------------
+  let selectedControlScheme = null;
+  let gameInitialized = false;
+
+  function selectControls(scheme) {
+    selectedControlScheme = scheme;
+    
+    // Hide the selection screen
+    const selectionScreen = document.getElementById('control-selection');
+    selectionScreen.classList.add('hidden');
+    
+    // Set up controls based on selection
+    if (scheme === 'mobile') {
+      setupMobileControls();
+    } else {
+      setupDesktopControls();
+    }
+    
+    // Initialize the game
+    if (!gameInitialized) {
+      init();
+      gameInitialized = true;
+    }
+  }
+
+  function setupMobileControls() {
+    // Force mobile mode regardless of device detection
+    window.FORCE_MOBILE = true;
+    
+    const help = document.getElementById('help');
+    help.textContent = 'Joystick: Move/strafe, Right side: Drag to look, Tap to shoot.';
+    
+    // Force show touch UI
+    const touchUI = document.getElementById('touch-ui');
+    if (touchUI) {
+      touchUI.classList.add('force-mobile');
+    }
+    
+    // Set up mobile touch controls
+    setupMobileTouchControls();
+    createTouchUI();
+  }
+
+  function setupDesktopControls() {
+    // Force desktop mode
+    window.FORCE_MOBILE = false;
+    
+    const help = document.getElementById('help');
+    help.textContent = 'Move: W/S, Strafe: A/D, Mouse: Look/aim, Reset: R';
+  }
+
   // ---------------- Canvas & timing ----------------
   const canvas = document.getElementById('canvas');
   const ctx = canvas.getContext('2d', { alpha: false });
@@ -127,11 +238,13 @@
   let HALF_H = (H / 2) | 0;
   ctx.imageSmoothingEnabled = false;
 
-  // --- Mobile detection ---
-  const MOBILE = /Mobi|Android|iPhone|iPad|iPod|Windows Phone|webOS|BlackBerry|Opera Mini|IEMobile/i.test(navigator.userAgent) || 
-                 ('ontouchstart' in window) || 
-                 (navigator.maxTouchPoints > 0) ||
-                 (window.innerWidth <= 768 && window.innerHeight <= 1024);
+  // --- Mobile detection (now overrideable by control selection) ---
+  const MOBILE = window.FORCE_MOBILE !== undefined ? window.FORCE_MOBILE : (
+    /Mobi|Android|iPhone|iPad|iPod|Windows Phone|webOS|BlackBerry|Opera Mini|IEMobile/i.test(navigator.userAgent) || 
+    ('ontouchstart' in window) || 
+    (navigator.maxTouchPoints > 0) ||
+    (window.innerWidth <= 768 && window.innerHeight <= 1024)
+  );
 
   if (MOBILE) {
     const help = document.getElementById('help');
@@ -158,7 +271,7 @@
 
   // --- Mouse pointer lock for desktop look ---
   function requestPointerLock() {
-    if (!MOBILE) {
+    if (!window.FORCE_MOBILE) { // Use control selection instead of MOBILE detection
       // Use the standard requestPointerLock or browser-specific versions
       const element = canvas;
       const requestMethod = element.requestPointerLock || 
@@ -226,10 +339,7 @@
   const TAP_THRESHOLD = 200;
   const DRAG_THRESHOLD = 10;
 
-  if (MOBILE) {
-    const help = document.getElementById('help');
-    help.textContent = 'Joystick: Move/strafe, Right side: Drag to look, Tap to shoot. (Desktop: W/S/A/D, Mouse to look, R to reset)';
-
+  function setupMobileTouchControls() {
     // Helper to get joystick DOM element
     function getJoystickElem() {
       return document.getElementById('joystick');
@@ -307,188 +417,184 @@
         delete activeTouches[id];
       }
     }, { passive: false });
-  } else {
-    document.getElementById('help').textContent = 'Move: W/S, Strafe: A/D, Mouse: Look/aim, Reset: R';
   }
 
-  // --- Mobile joystick: 2D movement (forward/back/strafe) ---
-  // Overwrite joystick logic to provide 2D movement vector
-  if (MOBILE) {
-    function createTouchUI() {
-      const ui = document.createElement('div');
-      ui.id = 'touch-ui';
-      ui.classList.add('force-mobile'); // Ensure it shows up
+  // --- Digital Joystick ---
+  function createTouchUI() {
+    if (!window.FORCE_MOBILE && !MOBILE) return;
+    
+    const ui = document.createElement('div');
+    ui.id = 'touch-ui';
+    ui.classList.add('force-mobile'); // Ensure it shows up
 
-      // --- Digital Joystick ---
-      const joystick = document.createElement('div');
-      joystick.id = 'joystick';
-      joystick.style.position = 'fixed';
-      joystick.style.left = '3vw';
-      joystick.style.bottom = '4vh';
-      joystick.style.width = '28vw';
-      joystick.style.height = '28vw';
-      joystick.style.maxWidth = '220px';
-      joystick.style.maxHeight = '220px';
-      joystick.style.touchAction = 'none';
-      joystick.style.pointerEvents = 'auto';
-      joystick.style.display = 'flex';
-      joystick.style.alignItems = 'center';
-      joystick.style.justifyContent = 'center';
+    // --- Digital Joystick ---
+    const joystick = document.createElement('div');
+    joystick.id = 'joystick';
+    joystick.style.position = 'fixed';
+    joystick.style.left = '3vw';
+    joystick.style.bottom = '4vh';
+    joystick.style.width = '28vw';
+    joystick.style.height = '28vw';
+    joystick.style.maxWidth = '220px';
+    joystick.style.maxHeight = '220px';
+    joystick.style.touchAction = 'none';
+    joystick.style.pointerEvents = 'auto';
+    joystick.style.display = 'flex';
+    joystick.style.alignItems = 'center';
+    joystick.style.justifyContent = 'center';
 
-      // Outer circle
-      const outer = document.createElement('div');
-      outer.style.position = 'absolute';
-      outer.style.left = '0';
-      outer.style.top = '0';
-      outer.style.width = '100%';
-      outer.style.height = '100%';
-      outer.style.background = 'rgba(128,128,128,0.20)';
-      outer.style.borderRadius = '50%';
-      outer.style.pointerEvents = 'none';
+    // Outer circle
+    const outer = document.createElement('div');
+    outer.style.position = 'absolute';
+    outer.style.left = '0';
+    outer.style.top = '0';
+    outer.style.width = '100%';
+    outer.style.height = '100%';
+    outer.style.background = 'rgba(128,128,128,0.20)';
+    outer.style.borderRadius = '50%';
+    outer.style.pointerEvents = 'none';
 
-      // Inner (thumb) circle
-      const inner = document.createElement('div');
-      inner.style.position = 'absolute';
-      inner.style.width = '38%';
-      inner.style.height = '38%';
+    // Inner (thumb) circle
+    const inner = document.createElement('div');
+    inner.style.position = 'absolute';
+    inner.style.width = '38%';
+    inner.style.height = '38%';
+    inner.style.left = '31%';
+    inner.style.top = '31%';
+    inner.style.background = 'rgba(128,128,128,0.50)';
+    inner.style.borderRadius = '50%';
+    inner.style.pointerEvents = 'auto';
+    inner.style.touchAction = 'none';
+    inner.style.transition = 'left 0.08s, top 0.08s';
+
+    joystick.appendChild(outer);
+    joystick.appendChild(inner);
+    ui.appendChild(joystick);
+
+    // --- Joystick logic ---
+    let joyActive = false, joyStart = null, joyCenter = null, joyRadius = null;
+    let joyVec = { x: 0, y: 0 }; // 2D movement vector
+    let joyTouchId = null;
+
+    function getJoyCenterAndRadius() {
+      const rect = joystick.getBoundingClientRect();
+      const cx = rect.left + rect.width / 2;
+      const cy = rect.top + rect.height / 2;
+      const r = rect.width / 2;
+      return { cx, cy, r, rect };
+    }
+
+    function resetJoystick() {
       inner.style.left = '31%';
       inner.style.top = '31%';
-      inner.style.background = 'rgba(128,128,128,0.50)';
-      inner.style.borderRadius = '50%';
-      inner.style.pointerEvents = 'auto';
-      inner.style.touchAction = 'none';
-      inner.style.transition = 'left 0.08s, top 0.08s';
-
-      joystick.appendChild(outer);
-      joystick.appendChild(inner);
-      ui.appendChild(joystick);
-
-      // --- Joystick logic ---
-      let joyActive = false, joyStart = null, joyCenter = null, joyRadius = null;
-      let joyVec = { x: 0, y: 0 }; // 2D movement vector
-      let joyTouchId = null;
-
-      function getJoyCenterAndRadius() {
-        const rect = joystick.getBoundingClientRect();
-        const cx = rect.left + rect.width / 2;
-        const cy = rect.top + rect.height / 2;
-        const r = rect.width / 2;
-        return { cx, cy, r, rect };
-      }
-
-      function resetJoystick() {
-        inner.style.left = '31%';
-        inner.style.top = '31%';
-        touchFlags.fwd = false;
-        touchFlags.back = false;
-        touchFlags.left = false;
-        touchFlags.right = false;
-        joyVec.x = 0; joyVec.y = 0;
-        joyActive = false;
-        joyTouchId = null;
-      }
-
-      function updateJoystick(touch) {
-        if (!joyCenter) return;
-        const dx = touch.clientX - joyCenter.cx;
-        const dy = touch.clientY - joyCenter.cy;
-        const dist = Math.sqrt(dx * dx + dy * dy);
-        const maxDist = joyRadius * 0.78;
-        let ndx = dx, ndy = dy;
-        let mag = dist / joyRadius;
-        if (dist > maxDist) {
-          ndx = dx * maxDist / dist;
-          ndy = dy * maxDist / dist;
-          mag = maxDist / joyRadius;
-        }
-        // Move thumb
-        const left = 50 + (ndx / joyRadius) * 50 - 19;
-        const top = 50 + (ndy / joyRadius) * 50 - 19;
-        inner.style.left = `${left}%`;
-        inner.style.top = `${top}%`;
-        // 2D movement vector, normalized to [-1,1]
-        joyVec.x = ndx / joyRadius;
-        joyVec.y = ndy / joyRadius;
-        // Set flags for legacy code (not used for movement now)
-        touchFlags.fwd = joyVec.y < -0.22;
-        touchFlags.back = joyVec.y > 0.22;
-        touchFlags.left = joyVec.x < -0.22;
-        touchFlags.right = joyVec.x > 0.22;
-      }
-
-      // Joystick event listeners (multi-touch aware)
-      inner.addEventListener('touchstart', (e) => {
-        e.preventDefault();
-        if (joyActive) return;
-        const touch = e.changedTouches[0];
-        joyActive = true;
-        joyTouchId = touch.identifier;
-        joyCenter = getJoyCenterAndRadius();
-        joyRadius = joyCenter.r;
-        updateJoystick(touch);
-      }, { passive: false });
-
-      joystick.addEventListener('touchstart', (e) => {
-        e.preventDefault();
-        // Find the first changed touch not already assigned
-        for (let i = 0; i < e.changedTouches.length; i++) {
-          const touch = e.changedTouches[i];
-          if (!joyActive) {
-            joyActive = true;
-            joyTouchId = touch.identifier;
-            joyCenter = getJoyCenterAndRadius();
-            joyRadius = joyCenter.r;
-            updateJoystick(touch);
-            break;
-          }
-        }
-      }, { passive: false });
-
-      joystick.addEventListener('touchmove', (e) => {
-        if (!joyActive) return;
-        // Find the touch with the joystick's id
-        for (let i = 0; i < e.touches.length; i++) {
-          const touch = e.touches[i];
-          if (touch.identifier === joyTouchId) {
-            e.preventDefault();
-            updateJoystick(touch);
-            break;
-          }
-        }
-      }, { passive: false });
-
-      joystick.addEventListener('touchend', (e) => {
-        // If the joystick's touch ended, reset
-        for (let i = 0; i < e.changedTouches.length; i++) {
-          const touch = e.changedTouches[i];
-          if (touch.identifier === joyTouchId) {
-            e.preventDefault();
-            resetJoystick();
-            break;
-          }
-        }
-      }, { passive: false });
-
-      joystick.addEventListener('touchcancel', (e) => {
-        for (let i = 0; i < e.changedTouches.length; i++) {
-          const touch = e.changedTouches[i];
-          if (touch.identifier === joyTouchId) {
-            e.preventDefault();
-            resetJoystick();
-            break;
-          }
-        }
-      }, { passive: false });
-
-      resetJoystick();
-
-      document.body.appendChild(ui);
-      window.addEventListener('contextmenu', (e) => e.preventDefault());
-
-      // Expose joyVec globally for movement
-      window._mobileJoyVec = joyVec;
+      touchFlags.fwd = false;
+      touchFlags.back = false;
+      touchFlags.left = false;
+      touchFlags.right = false;
+      joyVec.x = 0; joyVec.y = 0;
+      joyActive = false;
+      joyTouchId = null;
     }
-    createTouchUI();
+
+    function updateJoystick(touch) {
+      if (!joyCenter) return;
+      const dx = touch.clientX - joyCenter.cx;
+      const dy = touch.clientY - joyCenter.cy;
+      const dist = Math.sqrt(dx * dx + dy * dy);
+      const maxDist = joyRadius * 0.78;
+      let ndx = dx, ndy = dy;
+      let mag = dist / joyRadius;
+      if (dist > maxDist) {
+        ndx = dx * maxDist / dist;
+        ndy = dy * maxDist / dist;
+        mag = maxDist / joyRadius;
+      }
+      // Move thumb
+      const left = 50 + (ndx / joyRadius) * 50 - 19;
+      const top = 50 + (ndy / joyRadius) * 50 - 19;
+      inner.style.left = `${left}%`;
+      inner.style.top = `${top}%`;
+      // 2D movement vector, normalized to [-1,1]
+      joyVec.x = ndx / joyRadius;
+      joyVec.y = ndy / joyRadius;
+      // Set flags for legacy code (not used for movement now)
+      touchFlags.fwd = joyVec.y < -0.22;
+      touchFlags.back = joyVec.y > 0.22;
+      touchFlags.left = joyVec.x < -0.22;
+      touchFlags.right = joyVec.x > 0.22;
+    }
+
+    // Joystick event listeners (multi-touch aware)
+    inner.addEventListener('touchstart', (e) => {
+      e.preventDefault();
+      if (joyActive) return;
+      const touch = e.changedTouches[0];
+      joyActive = true;
+      joyTouchId = touch.identifier;
+      joyCenter = getJoyCenterAndRadius();
+      joyRadius = joyCenter.r;
+      updateJoystick(touch);
+    }, { passive: false });
+
+    joystick.addEventListener('touchstart', (e) => {
+      e.preventDefault();
+      // Find the first changed touch not already assigned
+      for (let i = 0; i < e.changedTouches.length; i++) {
+        const touch = e.changedTouches[i];
+        if (!joyActive) {
+          joyActive = true;
+          joyTouchId = touch.identifier;
+          joyCenter = getJoyCenterAndRadius();
+          joyRadius = joyCenter.r;
+          updateJoystick(touch);
+          break;
+        }
+      }
+    }, { passive: false });
+
+    joystick.addEventListener('touchmove', (e) => {
+      if (!joyActive) return;
+      // Find the touch with the joystick's id
+      for (let i = 0; i < e.touches.length; i++) {
+        const touch = e.touches[i];
+        if (touch.identifier === joyTouchId) {
+          e.preventDefault();
+          updateJoystick(touch);
+          break;
+        }
+      }
+    }, { passive: false });
+
+    joystick.addEventListener('touchend', (e) => {
+      // If the joystick's touch ended, reset
+      for (let i = 0; i < e.changedTouches.length; i++) {
+        const touch = e.changedTouches[i];
+        if (touch.identifier === joyTouchId) {
+          e.preventDefault();
+          resetJoystick();
+          break;
+        }
+      }
+    }, { passive: false });
+
+    joystick.addEventListener('touchcancel', (e) => {
+      for (let i = 0; i < e.changedTouches.length; i++) {
+        const touch = e.changedTouches[i];
+        if (touch.identifier === joyTouchId) {
+          e.preventDefault();
+          resetJoystick();
+          break;
+        }
+      }
+    }, { passive: false });
+
+    resetJoystick();
+
+    document.body.appendChild(ui);
+    window.addEventListener('contextmenu', (e) => e.preventDefault());
+
+    // Expose joyVec globally for movement
+    window._mobileJoyVec = joyVec;
   }
 
   // --- Blaster overlay (HUD) ---
@@ -1543,7 +1649,7 @@
       let drawCanvas = e.canvas;
       if (e.type === 'ranged' && e.isTelegraphing && e.flashCanvas) {
         const telegraphTime = currentTime - e.telegraphStart;
-        // Flash twice during telegraph duration
+        // Flash twice during
         const flashCycle = (telegraphTime / FLASH_INTERVAL) % 2;
         if (flashCycle < 1) {
           drawCanvas = e.flashCanvas; // White flash
@@ -1596,7 +1702,7 @@
       const drawStartX = Math.max(0, ((-spriteW / 2 + screenX) | 0));
       const drawEndX   = Math.min(W - 1, ((spriteW / 2 + screenX) | 0));
 
-      for (let (let stripe = drawStartX; stripe <= drawEndX; stripe++) {
+      for (let stripe = drawStartX; stripe <= drawEndX; stripe++) {
         if (transY < zBuf[stripe]) {
           const u = (stripe - (-spriteW / 2 + screenX)) / spriteW;
           const texX = Math.max(0, Math.min(shot_img.width - 1, Math.floor(u * shot_img.width)));
@@ -1684,11 +1790,11 @@
 
     // --- Mouse look (desktop) or mobile look drag ---
     let rot = 0.0;
-    if (!MOBILE && mouseLookDelta !== 0) {
+    if ((!window.FORCE_MOBILE && !MOBILE) && mouseLookDelta !== 0) {
       rot += (mouseLookDelta * 0.0025); // Sensitivity
       mouseLookDelta = 0;
     }
-    if (MOBILE && mouseLookDelta !== 0) {
+    if ((window.FORCE_MOBILE || MOBILE) && mouseLookDelta !== 0) {
       rot += (mouseLookDelta * 0.005); // Mobile sensitivity
       mouseLookDelta = 0;
     }
@@ -1732,8 +1838,8 @@
       isMoving = true;
     }
 
-    // Mobile joystick movement (if on mobile and joystick active)
-    if (MOBILE && window._mobileJoyVec) {
+    // Mobile joystick movement (if mobile controls selected and joystick active)
+    if ((window.FORCE_MOBILE || MOBILE) && window._mobileJoyVec) {
       const jx = window._mobileJoyVec.x, jy = window._mobileJoyVec.y;
       if (Math.abs(jx) > 0.1 || Math.abs(jy) > 0.1) {
         isMoving = true;
@@ -1836,12 +1942,14 @@
   loop.lastNow = performance.now();
 
   function init() {
-       W = canvas.width; H = canvas.height; HALF_H = (H/2)|0;
+    W = canvas.width; H = canvas.height; HALF_H = (H/2)|0;
     zBuf = new Float32Array(W);
     start_new_run();
     requestAnimationFrame(loop);
   }
-  init();
+
+  // Don't auto-initialize - wait for control selection
+  // init();
 
   function ensure_neighbors_visible() {
     const [t, d] = which_tile_contains(posX, posY);
