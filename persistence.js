@@ -8,16 +8,16 @@ const UPGRADES = {
     name: 'Faster Reload',
     description: 'Reduces blaster cooldown time',
     maxLevel: 5,
-    baseCost: 200,
+    baseCost: 300,
     costMultiplier: 1.5,
-    effect: (level) => 1.0 - (level * 0.15) // 1.0s -> 0.25s at max level
+    effect: (level) => 1.0 - (level * 0.15) // 1.0 -> 0.25 (scales from slower 1.4s base)
   },  projectileSpeed: {
     name: 'Rapid Fire',
     description: 'Increases projectile speed',
     maxLevel: 3,
-    baseCost: 300,
+    baseCost: 450,
     costMultiplier: 2.0,
-    effect: (level) => 1.0 + (level * 0.4) // 140% projectile speed at max level
+    effect: (level) => 1.0 + (level * 0.367) // 100% -> 210% (scales from slower base speed)
   },
   
   // Player upgrades
@@ -25,15 +25,15 @@ const UPGRADES = {
     name: 'Swift Movement',
     description: 'Increases movement speed',
     maxLevel: 4,
-    baseCost: 240,
+    baseCost: 360,
     costMultiplier: 1.8,
-    effect: (level) => 1.0 + (level * 0.2) // 180% speed at max level
+    effect: (level) => 0.7 + (level * 0.15) // 70% -> 130% speed (default 100% at level 2)
   },
   health: {
     name: 'Extra Lives',
     description: 'Start with additional lives',
     maxLevel: 3,
-    baseCost: 400,
+    baseCost: 600,
     costMultiplier: 2.5,
     effect: (level) => level // 0-3 extra lives
   }

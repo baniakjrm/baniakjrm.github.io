@@ -15,7 +15,7 @@ let swayClock = 0, lastYawSign = 0, lastBlasterRect = null;
 
 // Blaster cooldown system
 let blasterCooldown = 0.0;
-const BLASTER_COOLDOWN_TIME = 1.0; // 1 second
+const BLASTER_COOLDOWN_TIME = 1.4; // 1.4 seconds (slower start)
 
 function drawBlaster(turning, moving, yawSign, clock) {
   const currentImg = blasterCooldown > 0 ? emptyBlasterImg : blasterImg;
@@ -53,10 +53,11 @@ const shotImg = new Image(); shotImg.src = 'graphics/blast.png';
 const enemyBlastImg = new Image(); enemyBlastImg.src = 'graphics/enemyblast.png';
 const shots = [];
 const enemyShots = []; // Enemy projectiles
-const SHOT_SPEED = 18.0;
+const SHOT_SPEED = 10.0; // Even slower starting speed
 const ENEMY_SHOT_SPEED = 12.0; // Slightly slower than player shots
 const SHOT_TTL   = 1.2;
-const SHOT_SCALE = 0.5; // half size
+const PLAYER_SHOT_SCALE = 0.25; // quarter size for player shots
+const ENEMY_SHOT_SCALE = 0.5; // half size for enemy shots
 
 function spawnShot() {
   // Check if blaster is on cooldown (with upgrade multiplier)
@@ -137,6 +138,7 @@ function drawShots(zBuf) {
   for (const o of allShots) {
     const shots_array = o.type === 'player' ? shots : enemyShots;
     const shot_img = o.type === 'player' ? shotImg : enemyBlastImg;
+    const shot_scale = o.type === 'player' ? PLAYER_SHOT_SCALE : ENEMY_SHOT_SCALE;
     const s = shots_array[o.i];
     
     const relX = s.x - posX, relY = s.y - posY;
@@ -146,7 +148,7 @@ function drawShots(zBuf) {
     if (transY <= 0.0001) continue;
 
     const screenX = (W / 2) * (1 + transX / transY);
-    const spriteH = Math.abs((H / transY) * SHOT_SCALE);
+    const spriteH = Math.abs((H / transY) * shot_scale);
     const spriteW = spriteH;
 
     const drawStartY = Math.max(0, ((-spriteH / 2 + HALF_H) | 0));
