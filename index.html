@@ -20,14 +20,14 @@
   </div>
 
   <canvas id="canvas" width="960" height="600"></canvas>
-  <div id="hud"></div>
-  <div id="help">Move: W/S, Strafe: A/D, Mouse: Look/aim, Reset: R</div>
+  <div id="hud"></div>  <div id="help">Move: W/S, Strafe: A/D, Mouse: Look/aim, Reset: R</div>
   <div id="credits">0</div>
   <div id="kills">0</div>
+  <div id="lives">1</div>
   <div id="rooms">0</div>
   <div id="debug">DEBUG GODMODE ENABLED</div>
-
   <!-- Load JavaScript modules in dependency order -->
+  <script src="persistence.js"></script>
   <script src="world-generation.js"></script>
   <script src="weapons.js"></script>
   <script src="enemies.js"></script>

@@ -48,7 +48,7 @@ function setupDesktopControls() {
   window.FORCE_MOBILE = false;
   
   const help = document.getElementById('help');
-  help.textContent = 'Move: W/S, Strafe: A/D, Mouse: Look/aim, Reset: R';
+  help.textContent = 'Move: W/S, Strafe: A/D, Mouse: Look/aim, Reset: R, Upgrades: U';
 }
 
 // ---------------- Input ----------------
@@ -130,6 +130,7 @@ function setupKeyboardEvents() {
   window.addEventListener('keydown', (e) => {
     keys.add(e.code);
     if (e.code === 'KeyR') start_new_run();
+    if (e.code === 'KeyU' && typeof toggleUpgradeMenu === 'function') toggleUpgradeMenu();
     //if (e.code === 'KeyG') toggleGodMode();
     // Prevent default behavior for WASD keys
     if (['KeyW', 'KeyA', 'KeyS', 'KeyD'].includes(e.code)) {
@@ -397,8 +398,52 @@ function createTouchUI() {
       }
     }
   }, { passive: false });
-
   resetJoystick();
+
+  // --- Mobile Upgrade Button ---
+  const upgradeBtn = document.createElement('div');
+  upgradeBtn.id = 'mobile-upgrade-btn';
+  upgradeBtn.style.position = 'fixed';
+  upgradeBtn.style.right = '3vw';
+  upgradeBtn.style.top = '3vh';
+  upgradeBtn.style.width = '60px';
+  upgradeBtn.style.height = '60px';
+  upgradeBtn.style.background = 'rgba(255, 215, 0, 0.8)'; // Gold
+  upgradeBtn.style.border = '2px solid rgba(255, 255, 255, 0.8)';
+  upgradeBtn.style.borderRadius = '50%';
+  upgradeBtn.style.display = 'flex';
+  upgradeBtn.style.alignItems = 'center';
+  upgradeBtn.style.justifyContent = 'center';
+  upgradeBtn.style.fontSize = '24px';
+  upgradeBtn.style.color = '#000';
+  upgradeBtn.style.cursor = 'pointer';
+  upgradeBtn.style.touchAction = 'manipulation';
+  upgradeBtn.style.userSelect = 'none';
+  upgradeBtn.style.pointerEvents = 'auto';
+  upgradeBtn.style.zIndex = '1000';
+  upgradeBtn.textContent = '↑';
+  
+  upgradeBtn.addEventListener('touchstart', (e) => {
+    e.preventDefault();
+    upgradeBtn.style.background = 'rgba(255, 215, 0, 1.0)';
+  });
+  
+  upgradeBtn.addEventListener('touchend', (e) => {
+    e.preventDefault();
+    upgradeBtn.style.background = 'rgba(255, 215, 0, 0.8)';
+    if (typeof toggleUpgradeMenu === 'function') {
+      toggleUpgradeMenu();
+    }
+  });
+  
+  upgradeBtn.addEventListener('click', (e) => {
+    e.preventDefault();
+    if (typeof toggleUpgradeMenu === 'function') {
+      toggleUpgradeMenu();
+    }
+  });
+  
+  ui.appendChild(upgradeBtn);
 
   document.body.appendChild(ui);
   window.addEventListener('contextmenu', (e) => e.preventDefault());

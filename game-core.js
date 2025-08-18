@@ -189,9 +189,9 @@ function loop() {
     planeX = planeX * cos - planeY * sin;
     planeY = oldPlaneX * sin + planeY * cos;
   }
-
   // --- Movement ---
-  let move = MOVE_SPEED * dt * 3;
+  const speedMultiplier = window.MOVE_SPEED_MULTIPLIER || 1.0;
+  let move = MOVE_SPEED * dt * 3 * speedMultiplier;
   let moveX = 0, moveY = 0;
   let isMoving = false;
 
@@ -259,8 +259,24 @@ function loop() {
   } else { 
     swayClock = 0; 
     lastYawSign = 0; 
+  }  drawBlaster(turning, moving, lastYawSign, swayClock);
+  // Update and draw upgrade notification
+  if (typeof updateUpgradeNotification === 'function') {
+    updateUpgradeNotification(dt);
   }
-  drawBlaster(turning, moving, lastYawSign, swayClock);
+  if (typeof drawUpgradeNotification === 'function') {
+    drawUpgradeNotification();
+  }
+
+  // Update invincibility system
+  if (typeof updateInvincibilitySystem === 'function') {
+    updateInvincibilitySystem(dt);
+  }
+  
+  // Draw damage vignette on top of everything
+  if (typeof drawDamageVignette === 'function') {
+    drawDamageVignette();
+  }
 
   requestAnimationFrame(loop);
 }
@@ -270,21 +286,45 @@ function init() {
   W = canvas.width; H = canvas.height; HALF_H = (H/2)|0;
   zBuf = new Float32Array(W);
   initializeControls();
+  
+  // Apply any loaded upgrades
+  if (typeof applyUpgrades === 'function') {
+    applyUpgrades();
+  }
+  
   start_new_run();
   requestAnimationFrame(loop);
 }
 
 // Re-added: run reset / fresh start
 function start_new_run() {
-  kills = 0; updateKillsUI();
-  roomsCleared = 0; updateRoomsUI();
-  credits = 0; updateCreditsUI();
+  kills = 0; 
+  if (typeof updateKillsUI === 'function') updateKillsUI();
+  
+  roomsCleared = 0; 
+  if (typeof updateRoomsUI === 'function') updateRoomsUI();
+  
+  // Don't reset credits - they persist between deaths
+  // credits = 0; updateCreditsUI();
+  
+  // Reset lives to max when starting new run
+  if (typeof resetLives === 'function') {
+    resetLives();
+    if (typeof updateLivesUI === 'function') updateLivesUI();
+  }
+  
   clears = 0; maxDifficulty = 0.0;
   enemies.length = 0;
   shots.length = 0;
   enemyShots.length = 0; // Clear enemy shots
   gameOverCountdown = -1;
   blockingWalls.clear(); // Clear all blocking walls
+  
+  // Reset lives to maximum
+  if (typeof resetLives === 'function') {
+    resetLives();
+    updateLivesUI();
+  }
 
   current_tile = generate_tile(3);
   current_tile.kind = 'start';

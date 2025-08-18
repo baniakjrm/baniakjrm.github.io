@@ -446,9 +446,10 @@ function updateEnemies(dt) {
           e.telegraphStart = -1;
         }
       }
-      
-      // Collision with player
-      if (dist < (PLAYER_RADIUS + ENEMY_RADIUS)) triggerGameOver();
+        // Collision with player
+      if (dist < (PLAYER_RADIUS + ENEMY_RADIUS)) {
+        if (!debugGodMode && typeof takeDamage === 'function') takeDamage();
+      }
     } else {
       // Normal enemy behavior (unchanged)
       const dx = posX - e.x, dy = posY - e.y;
@@ -459,22 +460,19 @@ function updateEnemies(dt) {
         const nx = e.x + ux * step, ny = e.y + uy * step;
         if (can_move(nx, e.y)) e.x = nx;
         if (can_move(e.x, ny)) e.y = ny;
-      }
-
-      if (dist < (PLAYER_RADIUS + ENEMY_RADIUS)) {
-        if (!debugGodMode) triggerGameOver();
+      }      if (dist < (PLAYER_RADIUS + ENEMY_RADIUS)) {
+        if (!debugGodMode && typeof takeDamage === 'function') takeDamage();
       }
     }
   }
-
   // Shot collisions (player shots vs enemies)
   for (let si = shots.length - 1; si >= 0; si--) {
     const s = shots[si];
     let hit = false;
     for (let ei = enemies.length - 1; ei >= 0; ei--) {
       const e = enemies[ei];
-      if (e.state !== 'alive') continue;
-      const d2 = (s.x - e.x) ** 2 + (s.y - e.y) ** 2;
+      if (e.state !== 'alive') continue;      const d2 = (s.x - e.x) ** 2 + (s.y - e.y) ** 2;
+      
       if (d2 < ENEMY_RADIUS * ENEMY_RADIUS) {
         killEnemy(e);
         hit = true;

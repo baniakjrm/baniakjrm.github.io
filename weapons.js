@@ -30,7 +30,22 @@ function drawBlaster(turning, moving, yawSign, clock) {
   const baseY = H - h + BLASTER_BLEED_Y;
   const x = baseX + dx, y = baseY + dy;
   lastBlasterRect = { x, y, w, h };
+    // Apply invincibility opacity effect
+  const isInvincible = (typeof isPlayerInvincible === 'function' && isPlayerInvincible());
+  if (isInvincible) {
+    ctx.save();
+    // Flash between 20% and 80% opacity during invincibility
+    const flashSpeed = 8.0; // Flashes per second
+    const flashCycle = Math.sin(performance.now() / 1000 * flashSpeed * Math.PI);
+    const opacity = 0.5 + 0.3 * flashCycle; // Ranges from 0.2 to 0.8
+    ctx.globalAlpha = opacity;
+  }
+  
   ctx.drawImage(currentImg, x, y, w, h);
+  
+  if (isInvincible) {
+    ctx.restore();
+  }
 }
 
 // --------------- Projectiles (sprite-based) ---------------
@@ -44,17 +59,23 @@ const SHOT_TTL   = 1.2;
 const SHOT_SCALE = 0.5; // half size
 
 function spawnShot() {
-  // Check if blaster is on cooldown
+  // Check if blaster is on cooldown (with upgrade multiplier)
   if (blasterCooldown > 0) return;
   
   const forward = 0.80, rightOff = 0.2;
   const rx = -dirY, ry = dirX; // right vector
   const sx = posX + dirX * forward + rx * rightOff;
   const sy = posY + dirY * forward + ry * rightOff;
-  shots.push({ x: sx, y: sy, vx: dirX * SHOT_SPEED, vy: dirY * SHOT_SPEED, t: 0 });
   
-  // Start cooldown
-  blasterCooldown = BLASTER_COOLDOWN_TIME;
+  // Apply projectile speed upgrade (only to player shots)
+  const speedMultiplier = window.PROJECTILE_SPEED_MULTIPLIER || 1.0;
+  const effectiveSpeed = SHOT_SPEED * speedMultiplier;
+  
+  shots.push({ x: sx, y: sy, vx: dirX * effectiveSpeed, vy: dirY * effectiveSpeed, t: 0 });
+  
+  // Start cooldown (apply upgrade multiplier)
+  const cooldownMultiplier = window.BLASTER_COOLDOWN_MULTIPLIER || 1.0;
+  blasterCooldown = BLASTER_COOLDOWN_TIME * cooldownMultiplier;
 }
 
 function moveShots(dt) {
@@ -84,10 +105,9 @@ function moveShots(dt) {
       s.x = nx; s.y = ny; s.t += d; remain -= d;
       if (s.t > SHOT_TTL) { enemyShots.splice(i, 1); break; }
       
-      // Check collision with player
-      const playerDist = Math.hypot(s.x - posX, s.y - posY);
+      // Check collision with player      const playerDist = Math.hypot(s.x - posX, s.y - posY);
       if (playerDist < PLAYER_RADIUS) {
-        if (!debugGodMode) triggerGameOver();
+        if (!debugGodMode && typeof takeDamage === 'function') takeDamage();
         enemyShots.splice(i, 1);
         break;
       }

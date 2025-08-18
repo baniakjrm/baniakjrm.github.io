@@ -75,6 +75,35 @@ html, body {
   user-select: none;
 }
 
+/* Lives counter (top-right, below rooms) */
+#lives {
+  position: fixed; 
+  right: 12px; 
+  top: 100px;
+  background: rgba(60,60,60,0.85);
+  color: #ffaa00; 
+  font-weight: 700; 
+  font-size: 14px;
+  padding: 4px 8px; 
+  border-radius: 6px; 
+  user-select: none;
+}
+
+/* Lives display (top-right, below rooms) */
+#lives-display {
+  position: fixed; 
+  right: 12px; 
+  top: 100px;
+  background: rgba(60,60,60,0.85);
+  color: #ffaa63; 
+  font-weight: 700; 
+  font-size: 14px;
+  padding: 4px 8px; 
+  border-radius: 6px; 
+  user-select: none;
+  display: none; /* Hidden by default, shown when > 1 life */
+}
+
 /* Debug god mode indicator */
 #debug {
   position: fixed; 
@@ -234,4 +263,154 @@ html, body {
 
 #control-selection.hidden {
   display: none;
+}
+
+/* --- Upgrade Menu --- */
+.upgrade-menu {
+  position: fixed;
+  top: 50%;
+  left: 50%;
+  transform: translate(-50%, -50%);
+  background: rgba(20, 20, 20, 0.95);
+  border: 2px solid rgba(255, 255, 255, 0.3);
+  border-radius: 12px;
+  padding: 25px;
+  min-width: 400px;
+  max-width: 500px;
+  max-height: 80vh;
+  overflow-y: auto;
+  z-index: 1000;
+  color: #fff;
+  font-family: system-ui, Segoe UI, Roboto, Helvetica, Arial, sans-serif;
+  box-shadow: 0 0 30px rgba(0, 0, 0, 0.8);
+}
+
+.upgrade-menu h2 {
+  margin: 0 0 20px 0;
+  text-align: center;
+  color: #63a3ff;
+  font-size: 24px;
+  font-weight: 700;
+}
+
+.menu-credits {
+  text-align: center;
+  font-size: 18px;
+  font-weight: 600;
+  color: #63a3ff;
+  margin-bottom: 20px;
+  padding: 8px 12px;
+  background: rgba(60, 60, 60, 0.4);
+  border-radius: 6px;
+}
+
+.upgrade-item {
+  margin-bottom: 15px;
+  padding: 15px;
+  background: rgba(60, 60, 60, 0.3);
+  border: 1px solid rgba(255, 255, 255, 0.2);
+  border-radius: 8px;
+  transition: background-color 0.2s ease;
+}
+
+.upgrade-item:hover {
+  background: rgba(80, 80, 80, 0.4);
+}
+
+.upgrade-name {
+  display: block;
+  font-size: 16px;
+  font-weight: 600;
+  color: #fff;
+  margin-bottom: 6px;
+}
+
+.upgrade-desc {
+  font-size: 14px;
+  color: #bfbfbf;
+  margin-bottom: 10px;
+  line-height: 1.3;
+}
+
+.upgrade-button {
+  width: 100%;
+  padding: 10px;
+  background: rgba(99, 163, 255, 0.8);
+  border: none;
+  border-radius: 6px;
+  color: #fff;
+  font-size: 14px;
+  font-weight: 600;
+  cursor: pointer;
+  transition: all 0.2s ease;
+}
+
+.upgrade-button:hover:not(:disabled) {
+  background: rgba(99, 163, 255, 1.0);
+  transform: translateY(-1px);
+}
+
+.upgrade-button:disabled {
+  background: rgba(60, 60, 60, 0.5);
+  color: rgba(255, 255, 255, 0.5);
+  cursor: not-allowed;
+  transform: none;
+}
+
+.close-button {
+  width: 100%;
+  margin-top: 20px;
+  padding: 12px;
+  background: rgba(255, 99, 99, 0.8);
+  border: none;
+  border-radius: 6px;
+  color: #fff;
+  font-size: 16px;
+  font-weight: 600;
+  cursor: pointer;
+  transition: all 0.2s ease;
+}
+
+.close-button:hover {
+  background: rgba(255, 99, 99, 1.0);
+  transform: translateY(-1px);
+}
+
+/* Mobile upgrade button */
+#mobile-upgrade-btn {
+  position: fixed;
+  right: 3vw;
+  top: 3vh;
+  width: 60px;
+  height: 60px;
+  background: rgba(255, 215, 0, 0.8);
+  border: 2px solid rgba(255, 255, 255, 0.8);
+  border-radius: 50%;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  font-size: 24px;
+  font-weight: bold;
+  color: #000;
+  cursor: pointer;
+  touch-action: manipulation;
+  user-select: none;
+  pointer-events: auto;
+  z-index: 1000;
+  transition: all 0.2s ease;
+}
+
+#mobile-upgrade-btn:hover {
+  background: rgba(255, 215, 0, 1.0);
+  transform: scale(1.1);
+}
+
+#mobile-upgrade-btn:active {
+  transform: scale(0.95);
+}
+
+@media (min-width: 769px) {
+  #mobile-upgrade-btn {
+    display: none;
+  }
 }
