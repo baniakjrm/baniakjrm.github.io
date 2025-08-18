@@ -1,0 +1,3 @@
+- update the upgrade tip message on mobile to represent the upgrade button
+- fix the landscape upgrade menu from spilling off the side.
+- make the upgrade button 70% of its current size to be less obtrusive on mobile.
