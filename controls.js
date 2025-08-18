@@ -408,8 +408,8 @@ function createMobileUpgradeButton() {
   const upgradeBtn = document.createElement('div');
   upgradeBtn.id = 'mobile-upgrade-btn';
   upgradeBtn.style.position = 'fixed';
-  upgradeBtn.style.right = '12px'; // Match other UI elements
-  upgradeBtn.style.top = '130px'; // Below existing UI elements
+  upgradeBtn.style.left = '12px'; // Move to top left corner
+  upgradeBtn.style.top = '12px';
   upgradeBtn.style.width = '50px';
   upgradeBtn.style.height = '50px';
   upgradeBtn.style.background = 'rgba(255, 215, 0, 0.85)'; // Match UI styling

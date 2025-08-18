@@ -279,7 +279,7 @@ html, body {
   max-width: 500px;
   max-height: 80vh;
   overflow-y: auto;
-  z-index: 1000;
+  z-index: 2000; /* Higher z-index to ensure it's above mobile controls */
   color: #fff;
   font-family: system-ui, Segoe UI, Roboto, Helvetica, Arial, sans-serif;
   box-shadow: 0 0 30px rgba(0, 0, 0, 0.8);
@@ -288,19 +288,25 @@ html, body {
 /* Mobile-friendly upgrade menu */
 @media (max-width: 768px), (hover: none) and (pointer: coarse) {
   .upgrade-menu {
-    top: 10px;
-    left: 10px;
-    right: 10px;
-    bottom: 10px;
+    top: 20px;
+    left: 15px;
+    right: 15px;
+    bottom: auto;
     transform: none;
     min-width: unset;
     max-width: unset;
-    max-height: unset;
-    height: calc(100vh - 20px);
-    width: calc(100vw - 20px);
-    padding: 15px;
-    border-radius: 8px;
+    max-height: 85vh;
+    height: auto;
+    width: calc(100vw - 30px);
+    padding: 20px;
+    border-radius: 12px;
+    z-index: 2000; /* Ensure it's above mobile controls */
   }
+}
+
+/* Disable touch controls when upgrade menu is open */
+.upgrade-menu:not(.hidden) ~ #touch-ui {
+  pointer-events: none !important;
 }
 
 .upgrade-menu h2 {
