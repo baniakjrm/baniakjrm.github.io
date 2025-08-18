@@ -309,6 +309,12 @@ function openUpgradeMenu() {
     }
   }
   
+  // Disable touch events on mobile
+  if (window.FORCE_MOBILE || (typeof MOBILE !== 'undefined' && MOBILE)) {
+    document.body.style.touchAction = 'none';
+    document.body.style.overflow = 'hidden';
+  }
+  
   const menu = createUpgradeMenu();
   document.body.appendChild(menu);
   updateUpgradeMenu();
@@ -317,6 +323,12 @@ function openUpgradeMenu() {
 
 function closeUpgradeMenu() {
   if (!upgradeMenuOpen || !upgradeMenuElement) return;
+  
+  // Re-enable touch events on mobile
+  if (window.FORCE_MOBILE || (typeof MOBILE !== 'undefined' && MOBILE)) {
+    document.body.style.touchAction = '';
+    document.body.style.overflow = '';
+  }
   
   document.body.removeChild(upgradeMenuElement);
   upgradeMenuElement = null;
