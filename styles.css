@@ -307,6 +307,19 @@ html, body {
   }
 }
 
+/* Landscape mobile - need more aggressive margins */
+@media (max-height: 600px) and (orientation: landscape), 
+       (max-width: 926px) and (orientation: landscape) {
+  .upgrade-menu {
+    left: 60px !important;
+    right: 60px !important;
+    width: calc(100vw - 120px) !important;
+    top: 10px !important;
+    bottom: 10px !important;
+    padding: 10px !important;
+  }
+}
+
 /* Disable touch controls when upgrade menu is open */
 .upgrade-menu:not(.hidden) ~ #touch-ui {
   pointer-events: none !important;

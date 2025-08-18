@@ -311,30 +311,8 @@ function openUpgradeMenu() {
   
   // Disable touch events on mobile
   if (window.FORCE_MOBILE || (typeof MOBILE !== 'undefined' && MOBILE)) {
-    document.body.style.touchAction = 'none';
+    document.body.style.touchAction = 'pan-y'; // Allow vertical scrolling only
     document.body.style.overflow = 'hidden';
-    
-    // Add event listeners to prevent all touch events except on the upgrade menu
-    const preventTouch = (e) => {
-      if (!e.target.closest('.upgrade-menu')) {
-        e.preventDefault();
-        e.stopPropagation();
-        e.stopImmediatePropagation();
-      }
-    };
-    
-    document.addEventListener('touchstart', preventTouch, { passive: false, capture: true });
-    document.addEventListener('touchmove', preventTouch, { passive: false, capture: true });
-    document.addEventListener('touchend', preventTouch, { passive: false, capture: true });
-    document.addEventListener('touchcancel', preventTouch, { passive: false, capture: true });
-    
-    // Store these handlers so we can remove them later
-    window._upgradeMenuTouchHandlers = [
-      { event: 'touchstart', handler: preventTouch },
-      { event: 'touchmove', handler: preventTouch },
-      { event: 'touchend', handler: preventTouch },
-      { event: 'touchcancel', handler: preventTouch }
-    ];
   }
   
   const menu = createUpgradeMenu();
@@ -350,14 +328,6 @@ function closeUpgradeMenu() {
   if (window.FORCE_MOBILE || (typeof MOBILE !== 'undefined' && MOBILE)) {
     document.body.style.touchAction = '';
     document.body.style.overflow = '';
-    
-    // Remove the touch event listeners that were preventing background touches
-    if (window._upgradeMenuTouchHandlers) {
-      window._upgradeMenuTouchHandlers.forEach(({ event, handler }) => {
-        document.removeEventListener(event, handler, { capture: true });
-      });
-      window._upgradeMenuTouchHandlers = null;
-    }
   }
   
   document.body.removeChild(upgradeMenuElement);

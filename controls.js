@@ -153,6 +153,9 @@ function setupMobileTouchControls() {
 
   // --- Touchstart: assign each touch to joystick or look/shoot ---
   document.addEventListener('touchstart', (e) => {
+    // Don't handle touch starts if upgrade menu is open
+    if (typeof upgradeMenuOpen !== 'undefined' && upgradeMenuOpen) return;
+    
     for (let i = 0; i < e.changedTouches.length; i++) {
       const touch = e.changedTouches[i];
       const id = touch.identifier;
@@ -183,6 +186,9 @@ function setupMobileTouchControls() {
 
   // --- Touchmove: handle look/aim for right-side touches ---
   document.addEventListener('touchmove', (e) => {
+    // Don't handle touch moves if upgrade menu is open
+    if (typeof upgradeMenuOpen !== 'undefined' && upgradeMenuOpen) return;
+    
     for (let i = 0; i < e.changedTouches.length; i++) {
       const touch = e.changedTouches[i];
       const id = touch.identifier;
@@ -202,6 +208,9 @@ function setupMobileTouchControls() {
 
   // --- Touchend: handle tap-to-shoot for right-side touches ---
   document.addEventListener('touchend', (e) => {
+    // Don't handle touch ends if upgrade menu is open
+    if (typeof upgradeMenuOpen !== 'undefined' && upgradeMenuOpen) return;
+    
     for (let i = 0; i < e.changedTouches.length; i++) {
       const touch = e.changedTouches[i];
       const id = touch.identifier;
@@ -218,6 +227,9 @@ function setupMobileTouchControls() {
   }, { passive: false });
 
   document.addEventListener('touchcancel', (e) => {
+    // Don't handle touch cancels if upgrade menu is open
+    if (typeof upgradeMenuOpen !== 'undefined' && upgradeMenuOpen) return;
+    
     for (let i = 0; i < e.changedTouches.length; i++) {
       const id = e.changedTouches[i].identifier;
       delete activeTouches[id];
