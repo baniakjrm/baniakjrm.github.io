@@ -102,9 +102,8 @@ function renderFrame() {
     zBuf[x] = perpWallDist;
   }
 
-  // Sprites
-  drawEnemies(zBuf);
-  drawShots(zBuf);
+  // Sprites - combined depth sorting for proper occlusion
+  drawSprites(zBuf);
 }
 
 function ensure_neighbors_visible() {

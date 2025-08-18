@@ -424,15 +424,15 @@ function createMobileUpgradeButton() {
   upgradeBtn.style.top = '12px';
   upgradeBtn.style.width = '50px';
   upgradeBtn.style.height = '50px';
-  upgradeBtn.style.background = 'rgba(255, 215, 0, 0.85)'; // Match UI styling
+  upgradeBtn.style.background = 'rgba(255, 215, 0, 0.5)'; // 30% opacity
   upgradeBtn.style.border = '2px solid rgba(255, 255, 255, 0.8)';
   upgradeBtn.style.borderRadius = '50%';
   upgradeBtn.style.display = 'flex';
   upgradeBtn.style.alignItems = 'center';
   upgradeBtn.style.justifyContent = 'center';
-  upgradeBtn.style.fontSize = '20px';
+  upgradeBtn.style.fontSize = '40px';
   upgradeBtn.style.fontWeight = '700';
-  upgradeBtn.style.color = '#000';
+  upgradeBtn.style.color = '#fff';
   upgradeBtn.style.cursor = 'pointer';
   upgradeBtn.style.touchAction = 'manipulation';
   upgradeBtn.style.userSelect = 'none';
@@ -484,6 +484,11 @@ function toggleGodMode() {
   const debugElement = document.getElementById('debug');
   if (debugGodMode) {
     debugElement.style.display = 'block';
+    // Give 10,000 credits when entering god mode
+    if (typeof credits !== 'undefined') {
+      credits += 10000;
+      if (typeof updateCreditsUI === 'function') updateCreditsUI();
+    }
   } else {
     debugElement.style.display = 'none';
   }

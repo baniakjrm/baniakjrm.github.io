@@ -165,3 +165,112 @@ function drawShots(zBuf) {
     }
   }
 }
+
+// Combined sprite rendering with proper depth sorting
+function drawSprites(zBuf) {
+  if (!shotImg.complete || !enemyBlastImg.complete) return;
+  
+  // Collect all sprites (shots and enemies) with their distances
+  const allSprites = [];
+  
+  // Add player shots
+  for (let i = 0; i < shots.length; i++) {
+    const s = shots[i];
+    const d = (s.x - posX) ** 2 + (s.y - posY) ** 2;
+    allSprites.push({ type: 'playerShot', data: s, index: i, distance: d });
+  }
+  
+  // Add enemy shots
+  for (let i = 0; i < enemyShots.length; i++) {
+    const s = enemyShots[i];
+    const d = (s.x - posX) ** 2 + (s.y - posY) ** 2;
+    allSprites.push({ type: 'enemyShot', data: s, index: i, distance: d });
+  }
+  
+  // Add enemies
+  for (const e of enemies) {
+    if (e.state === 'alive' && e.canvas) {
+      const d = (e.x - posX) ** 2 + (e.y - posY) ** 2;
+      allSprites.push({ type: 'enemy', data: e, distance: d });
+    }
+  }
+  
+  // Sort by distance (far to near)
+  allSprites.sort((a, b) => b.distance - a.distance);
+  
+  const currentTime = performance.now() / 1000;
+  
+  // Render all sprites in depth order
+  for (const sprite of allSprites) {
+    if (sprite.type === 'enemy') {
+      // Render enemy
+      const e = sprite.data;
+      const relX = e.x - posX;
+      const relY = e.y - posY;
+      const invDet = 1.0 / (planeX * dirY - dirX * planeY);
+      const transX = invDet * ( dirY * relX - dirX * relY);
+      const transY = invDet * (-planeY * relX + planeX * relY);
+      if (transY <= 0.0001) continue;
+
+      const screenX = (W / 2) * (1 + transX / transY);
+      const spriteH = Math.min(H * 0.8, Math.abs((H / transY) * ENEMY_SCALE));
+      const aspect = e.canvas.width / e.canvas.height;
+      const spriteW = spriteH * aspect;
+      const drawStartY = Math.max(0, ((-spriteH / 2 + HALF_H) | 0));
+      const drawEndY   = Math.min(H - 1, ((spriteH / 2 + HALF_H) | 0));
+      const drawStartX = Math.max(0, ((-spriteW / 2 + screenX) | 0));
+      const drawEndX   = Math.min(W - 1, ((spriteW / 2 + screenX) | 0));
+
+      // Determine which canvas to use
+      let drawCanvas = e.canvas;
+      if (e.type === 'ranged' && e.isTelegraphing && e.flashCanvas) {
+        const telegraphTime = currentTime - e.telegraphStart;
+        const flashCycle = (telegraphTime / FLASH_INTERVAL) % 2;
+        if (flashCycle < 1) {
+          drawCanvas = e.flashCanvas;
+        }
+      }
+
+      for (let stripe = drawStartX; stripe <= drawEndX; stripe++) {
+        if (transY < zBuf[stripe]) {
+          const u = (stripe - (-spriteW / 2 + screenX)) / spriteW;
+          const uu = e.flip ? (1 - u) : u;
+          const texX = Math.max(0, Math.min(drawCanvas.width - 1, Math.floor(uu * drawCanvas.width)));
+          ctx.drawImage(
+            drawCanvas,
+            texX, 0, 1, drawCanvas.height,
+            stripe, drawStartY, 1, drawEndY - drawStartY + 1
+          );
+        }
+      }
+    } else {
+      // Render shot (player or enemy)
+      const s = sprite.data;
+      const shot_img = sprite.type === 'playerShot' ? shotImg : enemyBlastImg;
+      const shot_scale = sprite.type === 'playerShot' ? PLAYER_SHOT_SCALE : ENEMY_SHOT_SCALE;
+      
+      const relX = s.x - posX, relY = s.y - posY;
+      const invDet = 1.0 / (planeX * dirY - dirX * planeY);
+      const transX = invDet * ( dirY * relX - dirX * relY);
+      const transY = invDet * (-planeY * relX + planeX * relY);
+      if (transY <= 0.0001) continue;
+
+      const screenX = (W / 2) * (1 + transX / transY);
+      const spriteH = Math.abs((H / transY) * shot_scale);
+      const spriteW = spriteH;
+
+      const drawStartY = Math.max(0, ((-spriteH / 2 + HALF_H) | 0));
+      const drawEndY   = Math.min(H - 1, ((spriteH / 2 + HALF_H) | 0));
+      const drawStartX = Math.max(0, ((-spriteW / 2 + screenX) | 0));
+      const drawEndX   = Math.min(W - 1, ((spriteW / 2 + screenX) | 0));
+
+      for (let stripe = drawStartX; stripe <= drawEndX; stripe++) {
+        if (transY < zBuf[stripe]) {
+          const u = (stripe - (-spriteW / 2 + screenX)) / spriteW;
+          const texX = Math.max(0, Math.min(shot_img.width - 1, Math.floor(u * shot_img.width)));
+          ctx.drawImage(shot_img, texX, 0, 1, shot_img.height, stripe, drawStartY, 1, drawEndY - drawStartY + 1);
+        }
+      }
+    }
+  }
+}
