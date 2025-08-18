@@ -1,7 +1,7 @@
 // Attack of The Kruptins - Enemy System
 
-const enemyImg = new Image(); enemyImg.src = 'enemy.png';
-const rangedEnemyImg = new Image(); rangedEnemyImg.src = 'rangedenemy.png';
+const enemyImg = new Image(); enemyImg.src = 'graphics/enemy.png';
+const rangedEnemyImg = new Image(); rangedEnemyImg.src = 'graphics/rangedenemy.png';
 const ENEMY_RADIUS = 0.35;
 const PLAYER_RADIUS = 0.35;
 const ENEMY_SCALE = 0.9;

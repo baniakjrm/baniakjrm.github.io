@@ -2,9 +2,9 @@
 
 // --- Blaster overlay (HUD) ---
 const blasterImg = new Image();
-blasterImg.src = 'blaster.png';
+blasterImg.src = 'graphics/blaster.png';
 const emptyBlasterImg = new Image();
-emptyBlasterImg.src = 'empty.png';
+emptyBlasterImg.src = 'graphics/empty.png';
 let BLASTER_SCALE = 5.0;
 const SWAY_DUR   = 0.35;
 const SWAY_AMP_X = 18;
@@ -34,8 +34,8 @@ function drawBlaster(turning, moving, yawSign, clock) {
 }
 
 // --------------- Projectiles (sprite-based) ---------------
-const shotImg = new Image(); shotImg.src = 'blast.png';
-const enemyBlastImg = new Image(); enemyBlastImg.src = 'enemyblast.png';
+const shotImg = new Image(); shotImg.src = 'graphics/blast.png';
+const enemyBlastImg = new Image(); enemyBlastImg.src = 'graphics/enemyblast.png';
 const shots = [];
 const enemyShots = []; // Enemy projectiles
 const SHOT_SPEED = 18.0;
