@@ -459,9 +459,6 @@ function createMobileUpgradeButton() {
   
   document.body.appendChild(upgradeBtn);
   window.addEventListener('contextmenu', (e) => e.preventDefault());
-
-  // Expose joyVec globally for movement
-  window._mobileJoyVec = joyVec;
 }
 
 function setupMouseShootEvents() {
