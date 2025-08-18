@@ -113,8 +113,7 @@ function drawGameOverScreen(dt) {
 }
 
 function updateHUD() {
-  // HUD text (tile label)
-  document.getElementById('hud').textContent = `${current_tile?.label || ''}`;
+  // HUD disabled - no room labels displayed
 }
 
 // Lives display functions are defined above with other UI functions

@@ -285,6 +285,24 @@ html, body {
   box-shadow: 0 0 30px rgba(0, 0, 0, 0.8);
 }
 
+/* Mobile-friendly upgrade menu */
+@media (max-width: 768px), (hover: none) and (pointer: coarse) {
+  .upgrade-menu {
+    top: 10px;
+    left: 10px;
+    right: 10px;
+    bottom: 10px;
+    transform: none;
+    min-width: unset;
+    max-width: unset;
+    max-height: unset;
+    height: calc(100vh - 20px);
+    width: calc(100vw - 20px);
+    padding: 15px;
+    border-radius: 8px;
+  }
+}
+
 .upgrade-menu h2 {
   margin: 0 0 20px 0;
   text-align: center;
@@ -345,6 +363,35 @@ html, body {
   transition: all 0.2s ease;
 }
 
+/* Mobile-friendly upgrade buttons */
+@media (max-width: 768px), (hover: none) and (pointer: coarse) {
+  .upgrade-button {
+    padding: 15px;
+    font-size: 16px;
+    min-height: 50px;
+    touch-action: manipulation;
+  }
+  
+  .upgrade-item {
+    margin-bottom: 20px;
+    padding: 20px;
+  }
+  
+  .upgrade-name {
+    font-size: 18px;
+  }
+  
+  .upgrade-desc {
+    font-size: 16px;
+  }
+  
+  .close-button {
+    padding: 18px;
+    font-size: 18px;
+    min-height: 55px;
+  }
+}
+
 .upgrade-button:hover:not(:disabled) {
   background: rgba(99, 163, 255, 1.0);
   transform: translateY(-1px);
@@ -379,17 +426,17 @@ html, body {
 /* Mobile upgrade button */
 #mobile-upgrade-btn {
   position: fixed;
-  right: 3vw;
-  top: 3vh;
-  width: 60px;
-  height: 60px;
-  background: rgba(255, 215, 0, 0.8);
+  right: 12px;
+  top: 130px; /* Below lives counter */
+  width: 50px;
+  height: 50px;
+  background: rgba(255, 215, 0, 0.85);
   border: 2px solid rgba(255, 255, 255, 0.8);
   border-radius: 50%;
   display: flex;
   align-items: center;
   justify-content: center;
-  font-size: 24px;
+  font-size: 20px;
   font-weight: bold;
   color: #000;
   cursor: pointer;
@@ -409,8 +456,12 @@ html, body {
   transform: scale(0.95);
 }
 
-@media (min-width: 769px) {
-  #mobile-upgrade-btn {
-    display: none;
-  }
+/* Only show for mobile control scheme users (not based on screen size) */
+#mobile-upgrade-btn {
+  display: none;
+}
+
+/* Show when mobile controls are active */
+body.mobile-controls #mobile-upgrade-btn {
+  display: flex;
 }

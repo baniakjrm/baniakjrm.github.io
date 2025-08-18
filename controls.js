@@ -29,26 +29,21 @@ function setupMobileControls() {
   // Force mobile mode regardless of device detection
   window.FORCE_MOBILE = true;
   
-  const help = document.getElementById('help');
-  help.textContent = 'Joystick: Move/strafe, Right side: Drag to look, Tap to shoot.';
-  
-  // Force show touch UI
-  const touchUI = document.getElementById('touch-ui');
-  if (touchUI) {
-    touchUI.classList.add('force-mobile');
-  }
+  // Add mobile controls class to body for CSS targeting
+  document.body.classList.add('mobile-controls');
   
   // Set up mobile touch controls
   setupMobileTouchControls();
   createTouchUI();
+  createMobileUpgradeButton(); // Always create upgrade button for mobile
 }
 
 function setupDesktopControls() {
   // Force desktop mode
   window.FORCE_MOBILE = false;
   
-  const help = document.getElementById('help');
-  help.textContent = 'Move: W/S, Strafe: A/D, Mouse: Look/aim, Reset: R, Upgrades: U';
+  // Desktop controls are now shown in the control selection screen
+  // No help text needed here since we moved it to the selection UI
 }
 
 // ---------------- Input ----------------
@@ -400,40 +395,59 @@ function createTouchUI() {
   }, { passive: false });
   resetJoystick();
 
+  document.body.appendChild(ui);
+  window.addEventListener('contextmenu', (e) => e.preventDefault());
+
+  // Expose joyVec globally for movement
+  window._mobileJoyVec = joyVec;
+}
+
+// Create mobile upgrade button (separate from touch UI)
+function createMobileUpgradeButton() {
   // --- Mobile Upgrade Button ---
   const upgradeBtn = document.createElement('div');
   upgradeBtn.id = 'mobile-upgrade-btn';
   upgradeBtn.style.position = 'fixed';
-  upgradeBtn.style.right = '3vw';
-  upgradeBtn.style.top = '3vh';
-  upgradeBtn.style.width = '60px';
-  upgradeBtn.style.height = '60px';
-  upgradeBtn.style.background = 'rgba(255, 215, 0, 0.8)'; // Gold
+  upgradeBtn.style.right = '12px'; // Match other UI elements
+  upgradeBtn.style.top = '130px'; // Below existing UI elements
+  upgradeBtn.style.width = '50px';
+  upgradeBtn.style.height = '50px';
+  upgradeBtn.style.background = 'rgba(255, 215, 0, 0.85)'; // Match UI styling
   upgradeBtn.style.border = '2px solid rgba(255, 255, 255, 0.8)';
   upgradeBtn.style.borderRadius = '50%';
   upgradeBtn.style.display = 'flex';
   upgradeBtn.style.alignItems = 'center';
   upgradeBtn.style.justifyContent = 'center';
-  upgradeBtn.style.fontSize = '24px';
+  upgradeBtn.style.fontSize = '20px';
+  upgradeBtn.style.fontWeight = '700';
   upgradeBtn.style.color = '#000';
   upgradeBtn.style.cursor = 'pointer';
   upgradeBtn.style.touchAction = 'manipulation';
   upgradeBtn.style.userSelect = 'none';
   upgradeBtn.style.pointerEvents = 'auto';
   upgradeBtn.style.zIndex = '1000';
+  upgradeBtn.style.transition = 'all 0.2s ease';
   upgradeBtn.textContent = '↑';
   
   upgradeBtn.addEventListener('touchstart', (e) => {
     e.preventDefault();
     upgradeBtn.style.background = 'rgba(255, 215, 0, 1.0)';
+    upgradeBtn.style.transform = 'scale(1.1)';
   });
   
   upgradeBtn.addEventListener('touchend', (e) => {
     e.preventDefault();
-    upgradeBtn.style.background = 'rgba(255, 215, 0, 0.8)';
+    upgradeBtn.style.background = 'rgba(255, 215, 0, 0.85)';
+    upgradeBtn.style.transform = 'scale(1.0)';
     if (typeof toggleUpgradeMenu === 'function') {
       toggleUpgradeMenu();
     }
+  });
+  
+  upgradeBtn.addEventListener('touchcancel', (e) => {
+    e.preventDefault();
+    upgradeBtn.style.background = 'rgba(255, 215, 0, 0.85)';
+    upgradeBtn.style.transform = 'scale(1.0)';
   });
   
   upgradeBtn.addEventListener('click', (e) => {
@@ -443,9 +457,7 @@ function createTouchUI() {
     }
   });
   
-  ui.appendChild(upgradeBtn);
-
-  document.body.appendChild(ui);
+  document.body.appendChild(upgradeBtn);
   window.addEventListener('contextmenu', (e) => e.preventDefault());
 
   // Expose joyVec globally for movement

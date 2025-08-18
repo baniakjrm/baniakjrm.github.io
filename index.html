@@ -12,15 +12,17 @@
     <h1>Attack of The Kruptins</h1>
     <div style="font-size: 24px; margin-bottom: 30px;">Select a Control Scheme:</div>
     <div class="control-option" onclick="selectControls('desktop')">
-      Keyboard and Mouse
+      <div style="font-size: 20px; margin-bottom: 8px;">Keyboard and Mouse</div>
+      <div style="font-size: 14px; color: #bbb;">Move: W/S, Strafe: A/D, Mouse: Look/aim, Reset: R, Upgrades: U</div>
     </div>
     <div class="control-option" onclick="selectControls('mobile')">
-      Touchscreen
+      <div style="font-size: 20px; margin-bottom: 8px;">Touchscreen</div>
+      <div style="font-size: 14px; color: #bbb;">Joystick: Move/strafe, Right side: Drag to look, Tap to shoot</div>
     </div>
   </div>
 
   <canvas id="canvas" width="960" height="600"></canvas>
-  <div id="hud"></div>  <div id="help">Move: W/S, Strafe: A/D, Mouse: Look/aim, Reset: R</div>
+  <div id="hud"></div>
   <div id="credits">0</div>
   <div id="kills">0</div>
   <div id="lives">1</div>

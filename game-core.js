@@ -16,19 +16,14 @@ const MOBILE = window.FORCE_MOBILE !== undefined ? window.FORCE_MOBILE : (
   (window.innerWidth <= 768 && window.innerHeight <= 1024)
 );
 
+// Force show touch UI for mobile devices detected by JavaScript
 if (MOBILE) {
-  const help = document.getElementById('help');
-  help.textContent = 'Joystick: Move/strafe, Right side: Drag to look, Tap to shoot. (Desktop: W/S/A/D, Mouse to look, R to reset)';
-  
-  // Force show touch UI for devices detected as mobile by JavaScript
   document.addEventListener('DOMContentLoaded', () => {
     const touchUI = document.getElementById('touch-ui');
     if (touchUI) {
       touchUI.classList.add('force-mobile');
     }
   });
-} else {
-  document.getElementById('help').textContent = 'Move: W/S, Strafe: A/D, Mouse: Look/aim, Reset: R';
 }
 
 // ✱ Preserve internal res but stretch to biggest window area

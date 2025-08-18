@@ -338,25 +338,12 @@ function getEnemyCountForRoom(roomsCleared) {
     minCount = 3; maxCount = 5;
   } else if (roomsCleared <= 24) {
     minCount = 4; maxCount = 6;
-  } else if (roomsCleared <= 29) {
-    minCount = 5; maxCount = 7;
-  } else if (roomsCleared <= 36) {
-    minCount = 6; maxCount = 8;
-  } else if (roomsCleared <= 40) {
-    minCount = 7; maxCount = 9;
-  } else if (roomsCleared <= 50) {
-    minCount = 8; maxCount = 10;
-  } else if (roomsCleared <= 60) {
-    minCount = 9; maxCount = 11;
-  } else if (roomsCleared <= 70) {
-    minCount = 10; maxCount = 12;
-  } else if (roomsCleared <= 80) {
-    minCount = 11; maxCount = 13;
   } else {
-    // For rooms beyond 80, continue the pattern: every 10 rooms shifts the range by 1
-    const tierBeyond80 = Math.floor((roomsCleared - 81) / 10) + 1;
-    minCount = 11 + tierBeyond80;
-    maxCount = 13 + tierBeyond80;
+    // For rooms beyond 24, every 3 rooms increases both min and max by 1
+    const roomsBeyond24 = roomsCleared - 24;
+    const increaseAmount = Math.floor(roomsBeyond24 / 3);
+    minCount = 4 + increaseAmount;
+    maxCount = 6 + increaseAmount;
   }
   
   // Return random count within the range
@@ -509,7 +496,7 @@ function drawEnemies(zBuf) {
     if (transY <= 0.0001) continue;
 
     const screenX = (W / 2) * (1 + transX / transY);
-    const spriteH = Math.abs((H / transY) * ENEMY_SCALE);
+    const spriteH = Math.min(H * 0.8, Math.abs((H / transY) * ENEMY_SCALE)); // Cap max size at 80% of screen height
     const aspect = e.canvas.width / e.canvas.height;
     const spriteW = spriteH * aspect;
     const drawStartY = Math.max(0, ((-spriteH / 2 + HALF_H) | 0));

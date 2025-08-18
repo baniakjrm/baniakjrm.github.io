@@ -105,7 +105,8 @@ function moveShots(dt) {
       s.x = nx; s.y = ny; s.t += d; remain -= d;
       if (s.t > SHOT_TTL) { enemyShots.splice(i, 1); break; }
       
-      // Check collision with player      const playerDist = Math.hypot(s.x - posX, s.y - posY);
+      // Check collision with player
+      const playerDist = Math.hypot(s.x - posX, s.y - posY);
       if (playerDist < PLAYER_RADIUS) {
         if (!debugGodMode && typeof takeDamage === 'function') takeDamage();
         enemyShots.splice(i, 1);
