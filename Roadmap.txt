@@ -1,3 +1,9 @@
 - update the upgrade tip message on mobile to represent the upgrade button
 - fix the landscape upgrade menu from spilling off the side.
 - make the upgrade button 70% of its current size to be less obtrusive on mobile.
+- integrate (final boss ticket) and final boss system, where you have one attempt per ticket to beat the final boss
+and basically you have to clear a room, and then if dead end, then the way you came becomes boss hallway with torches.
+otherwise randomly one of the exits becomes the boss hallway. Boss hallway is long hallway with torches, that when you reach
+the end, its a huge room with one large pillar in the middle and 12 around it, and you fight the boss in this arena.
+The final bosses color increases as he takes damage, and he becomes more and more difficult as he loses health, and he 
+becomes more red.
