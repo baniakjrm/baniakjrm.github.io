@@ -7,3 +7,6 @@ otherwise randomly one of the exits becomes the boss hallway. Boss hallway is lo
 the end, its a huge room with one large pillar in the middle and 12 around it, and you fight the boss in this arena.
 The final bosses color increases as he takes damage, and he becomes more and more difficult as he loses health, and he 
 becomes more red.
+-Make it so that the mobile upgrade button has black arrow and black border by default but if you can afford an upgrade
+ then it becomes white arrow white border
+-remove dead end L tiles, and replace them (randomness wise) with the non dead-end ones. so the amount of L tiles you find is the same, just less dead ends.
