@@ -2,211 +2,311 @@
 <html lang="en">
 <head>
   <meta charset="utf-8" />
-  <title>Basic WebVR Pickup — Orange Ball</title>
+  <title>Attack of The Kruptins VR</title>
   <meta name="viewport" content="width=device-width, initial-scale=1" />
+  <!-- 
+    NOTE: This VR version requires a local server to work properly due to A-Frame's cross-origin policies.
+    You can start a simple server with:
+    - Python: python -m http.server 8000
+    - Node.js: npx http-server
+    - VS Code: Use Live Server extension
+    Then open http://localhost:8000/VrExperiment/vr.html
+  -->
   <!-- A-Frame (WebXR-enabled). Works on desktop & VR headsets. -->
   <script src="https://aframe.io/releases/1.5.0/aframe.min.js"></script>
+  
   <style>
     html, body { margin: 0; height: 100%; background:#000; }
-    #hud {
-      position: fixed; left: 50%; transform: translateX(-50%);
-      bottom: 12px; padding: 8px 12px; border-radius: 10px;
-      font-family: system-ui, -apple-system, Segoe UI, Roboto, "Helvetica Neue", Arial, "Noto Sans", "Liberation Sans", sans-serif;
-      background: rgba(0,0,0,0.5); color: #fff; font-size: 14px; line-height: 1.2;
-      user-select: none; pointer-events: none; white-space: pre-line; text-align: center;
+    /* Hide original canvas and UI elements */
+    #canvas, #hud, #credits, #kills, #lives, #rooms, #debug, #control-selection, #touch-ui, #mobile-upgrade-btn,
+    #creditsBox, #killsBox, #livesBox, #roomsBox {
+      display: none !important;
     }
   </style>
 </head>
 <body>
-  <div id="hud">Desktop: point with mouse, press & hold to pick up, release to drop.
-VR: point controller ray at the ball, hold trigger to pick up, release to drop.</div>
+  <!-- Hidden canvas for the original game to render to -->
+  <canvas id="canvas" width="960" height="600"></canvas>
+  <div id="hud"></div>
+  <div id="credits">0</div>
+  <div id="kills">0</div>
+  <div id="lives">1</div>
+  <div id="rooms">0</div>
+  <div id="debug">DEBUG GODMODE ENABLED</div>
+  <div id="control-selection"></div>
+  
+  <!-- Add missing UI elements that the game expects -->
+  <div id="creditsBox">0</div>
+  <div id="killsBox">0</div>
+  <div id="livesBox">1</div>
+  <div id="roomsBox">0</div>
 
-  <a-scene renderer="antialias: true; colorManagement: true" background="color: #88caff">
-    <!-- Lights -->
-    <a-entity light="type: ambient; color: #fff; intensity: 0.6"></a-entity>
-    <a-entity light="type: directional; color: #fff; intensity: 0.7" position="0 4 -2"></a-entity>
-
-    <!-- Ground -->
-    <a-plane id="ground" rotation="-90 0 0" width="30" height="30" color="#5bb66d" material="roughness:1; metalness:0"></a-plane>
-
-    <!-- Ball (on the ground, grabbable) -->
-    <a-sphere id="ball"
-              class="grabbable"
-              position="0 0.25 -1.8"
-              radius="0.25"
-              color="#ff8800"
-              material="metalness:0.2; roughness:0.5; color:#ff8800"
-              simple-physics="radius:0.25; groundY:0">
-    </a-sphere>
-
-    <!-- Camera (desktop WASD + mouse look) -->
-    <a-entity id="rig" position="0 1.6 1">
-      <a-entity camera look-controls wasd-controls></a-entity>
-    </a-entity>
-
-    <!-- Desktop mouse ray + grabber -->
-    <a-entity id="mouseCursor"
-              cursor="rayOrigin: mouse"
-              raycaster="objects: .grabbable; far: 10"
-              pickup-controller="mode: mouse">
-    </a-entity>
-
-    <!-- VR controllers with visible rays -->
-    <a-entity id="leftHand"
-              laser-controls="hand: left"
-              raycaster="objects: .grabbable; far: 3"
-              pickup-controller="mode: xr">
-    </a-entity>
-    <a-entity id="rightHand"
-              laser-controls="hand: right"
-              raycaster="objects: .grabbable; far: 3"
-              pickup-controller="mode: xr">
-    </a-entity>
-
-    <!-- Sky -->
-    <a-sky color="#cbe9ff"></a-sky>
-
-    <!-- Scripts: grabbing + very simple gravity/ground bounce -->
-    <script>
-      AFRAME.registerComponent('simple-physics', {
-        schema: { radius: {default: 0.25}, groundY: {default: 0} },
-        init: function () {
-          this.vel = new THREE.Vector3(0, 0, 0);
-          this.tmp = new THREE.Vector3();
+  <!-- Load original game files AFTER DOM elements are created -->
+  <script>
+    // Fix image paths for VR folder before loading game scripts
+    const originalImage = window.Image;
+    window.Image = function() {
+      const img = new originalImage();
+      const originalSrcSetter = Object.getOwnPropertyDescriptor(HTMLImageElement.prototype, 'src').set;
+      
+      Object.defineProperty(img, 'src', {
+        set: function(value) {
+          // Fix relative paths for graphics and images folders
+          if (value.startsWith('graphics/') || value.startsWith('images/')) {
+            value = '../' + value;
+          }
+          originalSrcSetter.call(this, value);
         },
-        tick: function (time, dt) {
-          if (dt === 0) return;
-          const el = this.el;
-          // Skip physics while grabbed
-          if (el.is && el.is('grabbed')) { this.vel.set(0,0,0); return; }
+        get: function() {
+          return this.getAttribute('src');
+        }
+      });
+      
+      return img;
+    };
+  </script>
+  <script src="../persistence.js"></script>
+  <script src="../world-generation.js"></script>
+  <script src="../weapons.js"></script>
+  <script src="../enemies.js"></script>
+  <script src="../ui.js"></script>
+  <script src="../controls.js"></script>
 
-          dt = dt / 1000;
-          // Gravity
-          this.vel.y += -9.8 * dt;
-          // Integrate
-          const p = el.object3D.position;
-          p.x += this.vel.x * dt;
-          p.y += this.vel.y * dt;
-          p.z += this.vel.z * dt;
+  <a-scene renderer="antialias: true; colorManagement: true" background="color: #000">
+    <!-- Lights -->
+    <a-entity light="type: ambient; color: #fff; intensity: 0.3"></a-entity>
+    <a-entity light="type: directional; color: #fff; intensity: 0.5" position="0 2 1"></a-entity>
 
-          // Ground collision (simple)
-          const minY = this.data.groundY + this.data.radius;
-          if (p.y < minY) {
-            p.y = minY;
-            if (this.vel.y < 0) this.vel.y *= -0.3; // bounce with damping
-            // simple friction
-            this.vel.x *= 0.85;
-            this.vel.z *= 0.85;
-            if (Math.abs(this.vel.y) < 0.2) this.vel.y = 0;
-            if (Math.abs(this.vel.x) < 0.02) this.vel.x = 0;
-            if (Math.abs(this.vel.z) < 0.02) this.vel.z = 0;
+    <!-- VR Game Display Plane (shows the game render) -->
+    <a-plane id="gameScreen" 
+             position="0 1.6 -2" 
+             width="4" 
+             height="2.5" 
+             material="shader: flat; transparent: false"
+             vr-game-display>
+    </a-plane>
+
+    <!-- Camera rig with VR controls -->
+    <a-entity id="rig" position="0 0 0">
+      <a-entity camera look-controls wasd-controls position="0 1.6 0"></a-entity>
+      
+      <!-- Left controller - movement -->
+      <a-entity id="leftController"
+                hand-controls="hand: left; handModelStyle: lowPoly; color: #ffcc99"
+                thumbstick-controls="hand: left">
+      </a-entity>
+      
+      <!-- Right controller - shooting -->
+      <a-entity id="rightController"
+                hand-controls="hand: right; handModelStyle: lowPoly; color: #ffcc99"
+                trigger-controls="hand: right">
+      </a-entity>
+    </a-entity>
+
+    <script>
+      // Initialize the original game but hide its rendering
+      let vrGameInitialized = false;
+      let gameCanvas, gameCtx;
+      let vrGameTexture;
+      
+      // Override the original game's control system for VR
+      window.FORCE_MOBILE = false;
+      selectedControlScheme = 'desktop'; // Use desktop scheme as base
+      
+      // Movement state for VR controls
+      let vrMovement = { x: 0, y: 0 };
+      let vrShooting = false;
+      let lastShotTime = 0;
+      
+      AFRAME.registerComponent('vr-game-display', {
+        init: function () {
+          // Create texture from the hidden canvas
+          this.el.addEventListener('materialtextureloaded', () => {
+            this.startGameRender();
+          });
+          
+          // Set up the material to use the game canvas as texture
+          this.setupGameTexture();
+        },
+        
+        setupGameTexture: function() {
+          gameCanvas = document.getElementById('canvas');
+          gameCtx = gameCanvas.getContext('2d', { alpha: false });
+          
+          // Create a WebGL-compatible canvas for the texture
+          const textureCanvas = document.createElement('canvas');
+          textureCanvas.width = gameCanvas.width;
+          textureCanvas.height = gameCanvas.height;
+          const textureCtx = textureCanvas.getContext('2d', { alpha: false });
+          
+          // Create texture from the WebGL-compatible canvas
+          const texture = new THREE.CanvasTexture(textureCanvas);
+          texture.needsUpdate = true;
+          texture.flipY = false;
+          texture.generateMipmaps = false;
+          texture.minFilter = THREE.LinearFilter;
+          texture.magFilter = THREE.LinearFilter;
+          
+          // Apply texture to plane
+          const material = this.el.getObject3D('mesh').material;
+          material.map = texture;
+          material.needsUpdate = true;
+          
+          vrGameTexture = texture;
+          this.textureCanvas = textureCanvas;
+          this.textureCtx = textureCtx;
+          
+          // Initialize the game if not already done
+          if (!vrGameInitialized) {
+            this.initializeGame();
+            vrGameInitialized = true;
+          }
+        },
+        
+        initializeGame: function() {
+          // Set control scheme before initializing
+          window.selectedControlScheme = 'desktop';
+          
+          // Initialize game systems without controls
+          if (typeof init === 'function') {
+            // Override control initialization to prevent conflicts
+            const originalInitControls = window.initializeControls;
+            window.initializeControls = function() {
+              // Set up minimal keyboard controls for VR debugging
+              const keys = new Set();
+              window.keys = keys; // Expose keys globally for compatibility
+              
+              window.addEventListener('keydown', (e) => {
+                keys.add(e.code);
+                if (e.code === 'KeyR' && typeof start_new_run === 'function') start_new_run();
+                if (e.code === 'KeyU' && typeof toggleUpgradeMenu === 'function') toggleUpgradeMenu();
+              });
+              
+              window.addEventListener('keyup', (e) => {
+                keys.delete(e.code);
+              });
+              
+              // Initialize mouse look delta for compatibility
+              window.mouseLookDelta = 0;
+            };
+            
+            init();
+            
+            // Restore original function
+            window.initializeControls = originalInitControls;
+          }
+        },
+        
+        startGameRender: function() {
+          // Game render loop
+          const vrGameLoop = () => {
+            if (vrGameTexture && gameCanvas && this.textureCanvas && this.textureCtx) {
+              // Update game state with VR inputs
+              this.updateGameWithVRInputs();
+              
+              // Copy the game canvas to our WebGL-compatible canvas
+              this.textureCtx.clearRect(0, 0, this.textureCanvas.width, this.textureCanvas.height);
+              this.textureCtx.drawImage(gameCanvas, 0, 0);
+              
+              // Update texture from the WebGL-compatible canvas
+              vrGameTexture.needsUpdate = true;
+            }
+            requestAnimationFrame(vrGameLoop);
+          };
+          vrGameLoop();
+        },
+        
+        updateGameWithVRInputs: function() {
+          // Override movement input
+          if (vrMovement.x !== 0 || vrMovement.y !== 0) {
+            // Convert thumbstick input to game movement
+            window._mobileJoyVec = {
+              x: vrMovement.x,
+              y: -vrMovement.y // Invert Y for proper forward/back
+            };
+          } else {
+            window._mobileJoyVec = { x: 0, y: 0 };
+          }
+          
+          // Handle shooting
+          if (vrShooting && performance.now() - lastShotTime > 500) { // 500ms cooldown
+            if (typeof spawnShot === 'function') {
+              spawnShot();
+              lastShotTime = performance.now();
+            }
           }
         }
       });
-
-      // Utility: (safe) reparent while preserving world transform.
-      function attachPreserveWorld(childEl, newParentEl) {
-        const child = childEl.object3D;
-        const newParent = newParentEl.object3D;
-        if (typeof newParent.attach === 'function') { // modern three.js
-          newParent.attach(child);
-          return;
-        }
-        // Fallback
-        const worldPos = new THREE.Vector3();
-        const worldQuat = new THREE.Quaternion();
-        const worldScale = new THREE.Vector3();
-        child.getWorldPosition(worldPos);
-        child.getWorldQuaternion(worldQuat);
-        child.getWorldScale(worldScale);
-        newParent.add(child);
-        child.position.copy(newParent.worldToLocal(worldPos));
-        child.quaternion.copy(worldQuat);
-        child.scale.copy(worldScale);
-      }
-
-      AFRAME.registerComponent('pickup-controller', {
-        schema: { mode: {default: 'xr'} }, // 'xr' for VR controllers, 'mouse' for desktop mouse
-        init: function () {
-          this.grabbedEl = null;
-          this.originalParent = null;
-
-          // Bind handlers
-          this.onSelectStart = this.onSelectStart.bind(this);
-          this.onSelectEnd = this.onSelectEnd.bind(this);
-
-          if (this.data.mode === 'xr') {
-            this.el.addEventListener('selectstart', this.onSelectStart);
-            this.el.addEventListener('selectend', this.onSelectEnd);
-          } else { // mouse
-            // Use mousedown/up anywhere; ray comes from this entity's raycaster (rayOrigin: mouse)
-            window.addEventListener('mousedown', this.onSelectStart);
-            window.addEventListener('mouseup', this.onSelectEnd);
-          }
+      
+      // Left controller thumbstick for movement
+      AFRAME.registerComponent('thumbstick-controls', {
+        schema: {
+          hand: {default: 'left'}
         },
-        remove: function () {
-          if (this.data.mode === 'xr') {
-            this.el.removeEventListener('selectstart', this.onSelectStart);
-            this.el.removeEventListener('selectend', this.onSelectEnd);
+        
+        init: function() {
+          this.onThumbstickChanged = this.onThumbstickChanged.bind(this);
+          this.el.addEventListener('thumbstickmoved', this.onThumbstickChanged);
+        },
+        
+        onThumbstickChanged: function(evt) {
+          const { x, y } = evt.detail;
+          
+          // Dead zone
+          if (Math.abs(x) < 0.1 && Math.abs(y) < 0.1) {
+            vrMovement.x = 0;
+            vrMovement.y = 0;
           } else {
-            window.removeEventListener('mousedown', this.onSelectStart);
-            window.removeEventListener('mouseup', this.onSelectEnd);
+            vrMovement.x = x;
+            vrMovement.y = y;
           }
-        },
-        getFirstHit: function () {
-          const rc = this.el.components.raycaster;
-          if (!rc) return null;
-          const hits = rc.intersections || [];
-          for (let i = 0; i < hits.length; i++) {
-            const target = hits[i].object && hits[i].object.el;
-            if (target && target.classList && target.classList.contains('grabbable')) {
-              return target;
-            }
-          }
-          return null;
-        },
-        onSelectStart: function () {
-          if (this.grabbedEl) return;
-          const hitEl = this.getFirstHit();
-          if (!hitEl) return;
-
-          this.grabbedEl = hitEl;
-          this.originalParent = hitEl.object3D.parent.el || hitEl.sceneEl;
-
-          // Mark grabbed (disables simple-physics)
-          this.grabbedEl.addState && this.grabbedEl.addState('grabbed');
-
-          // Parent to controller/mouse ray entity
-          attachPreserveWorld(this.grabbedEl, this.el);
-
-          // Bring slightly in front of the controller/ray for a nicer hold position
-          const obj = this.grabbedEl.object3D;
-          obj.position.z = Math.min(obj.position.z, -0.15);
-
-          // Zero velocity so it doesn't "leak" when released
-          const phys = this.grabbedEl.components['simple-physics'];
-          if (phys) phys.vel.set(0,0,0);
-        },
-        onSelectEnd: function () {
-          if (!this.grabbedEl) return;
-
-          // Return to original parent (usually scene)
-          attachPreserveWorld(this.grabbedEl, this.originalParent);
-
-          // Unmark grabbed (re-enables simple-physics)
-          this.grabbedEl.removeState && this.grabbedEl.removeState('grabbed');
-
-          // tiny drop impulse feels nicer
-          const phys = this.grabbedEl.components['simple-physics'];
-          if (phys) {
-            phys.vel.set(0, -0.1, 0);
-          }
-
-          this.grabbedEl = null;
-          this.originalParent = null;
         }
+      });
+      
+      // Right controller trigger for shooting
+      AFRAME.registerComponent('trigger-controls', {
+        schema: {
+          hand: {default: 'right'}
+        },
+        
+        init: function() {
+          this.onTriggerDown = this.onTriggerDown.bind(this);
+          this.onTriggerUp = this.onTriggerUp.bind(this);
+          
+          this.el.addEventListener('triggerdown', this.onTriggerDown);
+          this.el.addEventListener('triggerup', this.onTriggerUp);
+        },
+        
+        onTriggerDown: function(evt) {
+          vrShooting = true;
+        },
+        
+        onTriggerUp: function(evt) {
+          vrShooting = false;
+        }
+      });
+      
+      // Override original controls to prevent conflicts
+      window.addEventListener('load', () => {
+        // Hide control selection and start game directly
+        const controlSelection = document.getElementById('control-selection');
+        if (controlSelection) {
+          controlSelection.style.display = 'none';
+        }
+        
+        // Override mouse controls to prevent conflicts
+        window.addEventListener('mousemove', (e) => {
+          e.stopImmediatePropagation();
+        }, true);
+        
+        window.addEventListener('mousedown', (e) => {
+          e.stopImmediatePropagation();
+        }, true);
       });
     </script>
   </a-scene>
+  
+  <!-- Load original game core AFTER A-Frame setup -->
+  <script src="../game-core.js"></script>
 </body>
 </html>
