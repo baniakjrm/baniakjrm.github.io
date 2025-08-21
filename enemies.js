@@ -78,6 +78,30 @@ function makeTintedEnemyCanvas(color, isRanged = false) {
   return c;
 }
 
+function makeGrayEnemyCanvas(isRanged = false) {
+  const sourceImg = isRanged ? rangedEnemyImg : enemyImg;
+  if (!sourceImg.complete || !sourceImg.naturalWidth) return null;
+  const c = document.createElement('canvas');
+  c.width = sourceImg.width;
+  c.height = sourceImg.height;
+  const gctx = c.getContext('2d');
+
+  // Draw original image
+  gctx.drawImage(sourceImg, 0, 0);
+
+  // Apply grayscale effect
+  gctx.globalCompositeOperation = 'multiply';
+  gctx.fillStyle = 'rgb(128,128,128)'; // Gray tint
+  gctx.fillRect(0, 0, c.width, c.height);
+
+  // Re-apply original alpha
+  gctx.globalCompositeOperation = 'destination-in';
+  gctx.drawImage(sourceImg, 0, 0);
+
+  gctx.globalCompositeOperation = 'source-over';
+  return c;
+}
+
 function makeWhiteFlashCanvas(isRanged = false) {
   const sourceImg = isRanged ? rangedEnemyImg : enemyImg;
   if (!sourceImg.complete || !sourceImg.naturalWidth) return null;
@@ -208,6 +232,7 @@ function attemptSpawnEnemy(tile, isRanged) {
         const speed = enemySpeedForDifficulty(difficulty); // Use same speed scaling as normal enemies
         const tint = makeTintedEnemyCanvas(color, true);
         const flashCanvas = makeWhiteFlashCanvas(true);
+        const grayCanvas = makeGrayEnemyCanvas(true);
         
         // Prevent firing for first 3 seconds after spawn
         const now = performance.now() / 1000;
@@ -222,12 +247,15 @@ function attemptSpawnEnemy(tile, isRanged) {
           difficulty,
           canvas: tint,
           flashCanvas,
+          grayCanvas,
           state: 'alive',
           type: 'ranged',
           lastShotTime: now + 3.0, // <-- cannot fire for first 3 seconds
           fireRate,
           telegraphStart: -1,
-          isTelegraphing: false
+          isTelegraphing: false,
+          deathStartTime: 0,
+          deathProgress: 0
         };
       } else {
         // Normal enemy progression: random difficulty based on rooms cleared
@@ -237,6 +265,7 @@ function attemptSpawnEnemy(tile, isRanged) {
         const color = enemyColorForDifficulty(difficulty);
         const speed = enemySpeedForDifficulty(difficulty);
         const tint = makeTintedEnemyCanvas(color, false);
+        const grayCanvas = makeGrayEnemyCanvas(false);
         
         return {
           tile,
@@ -248,8 +277,11 @@ function attemptSpawnEnemy(tile, isRanged) {
           speed,
           difficulty,
           canvas: tint,
+          grayCanvas,
           state: 'alive',
-          type: 'normal'
+          type: 'normal',
+          deathStartTime: 0,
+          deathProgress: 0
         };
       }
     }
@@ -266,7 +298,9 @@ function progressAfterStateChange(wasKill) {
 
 function killEnemy(e) {
   if (e.state !== 'alive') return;
-  e.state = 'killed';
+  e.state = 'dying';
+  e.deathStartTime = performance.now() / 1000;
+  e.deathProgress = 0;
   
   // Award credits based on enemy type and difficulty
   let creditValue;
@@ -282,9 +316,6 @@ function killEnemy(e) {
   updateCreditsUI();
   
   progressAfterStateChange(true);
-  
-  // Check if all enemies in this tile are defeated
-  checkAndUpdateExitBlocks(e.tile);
 }
 
 function despawnEnemy(e) {
@@ -311,7 +342,7 @@ function despawnEnemiesInTile(tile) {
 function checkAndUpdateExitBlocks(tile) {
   if (!tile || !tile.hasActiveEnemies) return;
   
-  // Count alive enemies in this tile
+  // Count alive enemies in this tile (dying enemies don't block exits)
   const aliveCount = enemies.filter(e => e.tile === tile && e.state === 'alive').length;
   
   if (aliveCount === 0) {
@@ -387,68 +418,85 @@ function updateEnemies(dt) {
   
   for (let i = enemies.length - 1; i >= 0; i--) {
     const e = enemies[i];
-    if (e.state !== 'alive') continue;
-
-    // Update animation
-    e.anim += dt;
-    e.flip = Math.sin(e.anim * 8.0) > 0;
     
-    if (e.type === 'ranged') {
-      // Ranged enemy behavior
-      const dx = posX - e.x, dy = posY - e.y;
-      const dist = Math.hypot(dx, dy);
+    if (e.state === 'dying') {
+      // Handle death animation
+      const deathDuration = 0.3; // 0.5 second death animation (twice as fast)
+      const elapsed = currentTime - e.deathStartTime;
+      e.deathProgress = Math.min(1.0, elapsed / deathDuration);
       
-      // Movement (same as normal enemies but fixed speed)
-      if (dist > 1e-4) {
-        const step = e.speed * dt;
-        const ux = dx / dist, uy = dy / dist;
-        const nx = e.x + ux * step, ny = e.y + uy * step;
-        if (can_move(nx, e.y)) e.x = nx;
-        if (can_move(e.x, ny)) e.y = ny;
+      if (e.deathProgress >= 1.0) {
+        // Death animation complete, remove enemy
+        e.state = 'dead';
+        checkAndUpdateExitBlocks(e.tile);
+        continue;
       }
+    } else if (e.state !== 'alive') {
+      continue;
+    }
+
+    if (e.state === 'alive') {
+      // Update animation
+      e.anim += dt;
+      e.flip = Math.sin(e.anim * 8.0) > 0;
       
-      // Shooting logic
-      if (!e.isTelegraphing && currentTime - e.lastShotTime >= e.fireRate) {
-        // Start telegraphing
-        e.isTelegraphing = true;
-        e.telegraphStart = currentTime;
-      }
-      
-      if (e.isTelegraphing) {
-        const telegraphTime = currentTime - e.telegraphStart;
-        if (telegraphTime >= TELEGRAPH_DURATION) {
-          // Fire projectile
-          if (dist > 1e-4) {
-            const ux = dx / dist, uy = dy / dist;
-            enemyShots.push({
-              x: e.x,
-              y: e.y,
-              vx: ux * ENEMY_SHOT_SPEED,
-              vy: uy * ENEMY_SHOT_SPEED,
-              t: 0
-            });
-          }
-          e.lastShotTime = currentTime;
-          e.isTelegraphing = false;
-          e.telegraphStart = -1;
+      if (e.type === 'ranged') {
+        // Ranged enemy behavior
+        const dx = posX - e.x, dy = posY - e.y;
+        const dist = Math.hypot(dx, dy);
+        
+        // Movement (same as normal enemies but fixed speed)
+        if (dist > 1e-4) {
+          const step = e.speed * dt;
+          const ux = dx / dist, uy = dy / dist;
+          const nx = e.x + ux * step, ny = e.y + uy * step;
+          if (can_move(nx, e.y)) e.x = nx;
+          if (can_move(e.x, ny)) e.y = ny;
         }
-      }
-        // Collision with player
-      if (dist < (PLAYER_RADIUS + ENEMY_RADIUS)) {
-        if (!debugGodMode && typeof takeDamage === 'function') takeDamage();
-      }
-    } else {
-      // Normal enemy behavior (unchanged)
-      const dx = posX - e.x, dy = posY - e.y;
-      const dist = Math.hypot(dx, dy);
-      if (dist > 1e-4) {
-        const step = e.speed * dt;
-        const ux = dx / dist, uy = dy / dist;
-        const nx = e.x + ux * step, ny = e.y + uy * step;
-        if (can_move(nx, e.y)) e.x = nx;
-        if (can_move(e.x, ny)) e.y = ny;
-      }      if (dist < (PLAYER_RADIUS + ENEMY_RADIUS)) {
-        if (!debugGodMode && typeof takeDamage === 'function') takeDamage();
+        
+        // Shooting logic
+        if (!e.isTelegraphing && currentTime - e.lastShotTime >= e.fireRate) {
+          // Start telegraphing
+          e.isTelegraphing = true;
+          e.telegraphStart = currentTime;
+        }
+        
+        if (e.isTelegraphing) {
+          const telegraphTime = currentTime - e.telegraphStart;
+          if (telegraphTime >= TELEGRAPH_DURATION) {
+            // Fire projectile
+            if (dist > 1e-4) {
+              const ux = dx / dist, uy = dy / dist;
+              enemyShots.push({
+                x: e.x,
+                y: e.y,
+                vx: ux * ENEMY_SHOT_SPEED,
+                vy: uy * ENEMY_SHOT_SPEED,
+                t: 0
+              });
+            }
+            e.lastShotTime = currentTime;
+            e.isTelegraphing = false;
+            e.telegraphStart = -1;
+          }
+        }
+          // Collision with player
+        if (dist < (PLAYER_RADIUS + ENEMY_RADIUS)) {
+          if (!debugGodMode && typeof takeDamage === 'function') takeDamage();
+        }
+      } else {
+        // Normal enemy behavior (unchanged)
+        const dx = posX - e.x, dy = posY - e.y;
+        const dist = Math.hypot(dx, dy);
+        if (dist > 1e-4) {
+          const step = e.speed * dt;
+          const ux = dx / dist, uy = dy / dist;
+          const nx = e.x + ux * step, ny = e.y + uy * step;
+          if (can_move(nx, e.y)) e.x = nx;
+          if (can_move(e.x, ny)) e.y = ny;
+        }        if (dist < (PLAYER_RADIUS + ENEMY_RADIUS)) {
+          if (!debugGodMode && typeof takeDamage === 'function') takeDamage();
+        }
       }
     }
   }
@@ -468,18 +516,18 @@ function updateEnemies(dt) {
     if (hit) shots.splice(si,  1);
   }
 
-  // Remove dead/spent enemies from list
-  enemies = enemies.filter(e => e.state === 'alive');
+  // Remove dead enemies from list
+  enemies = enemies.filter(e => e.state !== 'dead');
 }
 
 // Replace drawEnemies with depth-sorted rendering
 function drawEnemies(zBuf) {
-  // Collect alive, drawable enemies with distance
+  // Collect alive and dying, drawable enemies with distance
   const list = [];
   const currentTime = performance.now() / 1000;
   
   for (const e of enemies) {
-    if (e.state === 'alive' && e.canvas) {
+    if ((e.state === 'alive' || e.state === 'dying') && e.canvas) {
       const d = (e.x - posX) * (e.x - posX) + (e.y - posY) * (e.y - posY);
       list.push({ e, d });
     }
@@ -496,17 +544,49 @@ function drawEnemies(zBuf) {
     if (transY <= 0.0001) continue;
 
     const screenX = (W / 2) * (1 + transX / transY);
-    const spriteH = Math.min(H * 0.8, Math.abs((H / transY) * ENEMY_SCALE)); // Cap max size at 80% of screen height
+    let spriteH = Math.min(H * 0.8, Math.abs((H / transY) * ENEMY_SCALE)); // Cap max size at 80% of screen height
+    
+    // Apply squishing effect for dying enemies
+    if (e.state === 'dying') {
+      // Squish from top down - reduce height as death progresses
+      spriteH *= (1.0 - e.deathProgress);
+    }
+    
     const aspect = e.canvas.width / e.canvas.height;
     const spriteW = spriteH * aspect;
-    const drawStartY = Math.max(0, ((-spriteH / 2 + HALF_H) | 0));
-    const drawEndY   = Math.min(H - 1, ((spriteH / 2 + HALF_H) | 0));
+    
+    // Adjust drawing position for squishing effect (anchor to bottom)
+    const drawStartY = Math.max(0, ((HALF_H - spriteH / 2) | 0));
+    const drawEndY   = Math.min(H - 1, ((HALF_H + spriteH / 2) | 0));
     const drawStartX = Math.max(0, ((-spriteW / 2 + screenX) | 0));
     const drawEndX   = Math.min(W - 1, ((spriteW / 2 + screenX) | 0));
 
-    // Determine which canvas to use (normal, flashing, or telegraph)
+    // Determine which canvas to use (normal, flashing, telegraph, or dying)
     let drawCanvas = e.canvas;
-    if (e.type === 'ranged' && e.isTelegraphing && e.flashCanvas) {
+    
+    if (e.state === 'dying') {
+      // Lerp between colored and gray canvas based on death progress
+      if (e.deathProgress < 1.0 && e.grayCanvas) {
+        // Create a temporary canvas for color interpolation
+        const tempCanvas = document.createElement('canvas');
+        tempCanvas.width = e.canvas.width;
+        tempCanvas.height = e.canvas.height;
+        const tempCtx = tempCanvas.getContext('2d');
+        
+        // Draw colored version with decreasing opacity
+        tempCtx.globalAlpha = 1.0 - e.deathProgress;
+        tempCtx.drawImage(e.canvas, 0, 0);
+        
+        // Draw gray version with increasing opacity
+        tempCtx.globalAlpha = e.deathProgress;
+        tempCtx.drawImage(e.grayCanvas, 0, 0);
+        
+        tempCtx.globalAlpha = 1.0;
+        drawCanvas = tempCanvas;
+      } else {
+        drawCanvas = e.grayCanvas || e.canvas;
+      }
+    } else if (e.type === 'ranged' && e.isTelegraphing && e.flashCanvas) {
       const telegraphTime = currentTime - e.telegraphStart;
       // Flash twice during
       const flashCycle = (telegraphTime / FLASH_INTERVAL) % 2;

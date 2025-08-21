@@ -189,7 +189,7 @@ function drawSprites(zBuf) {
   
   // Add enemies
   for (const e of enemies) {
-    if (e.state === 'alive' && e.canvas) {
+    if ((e.state === 'alive' || e.state === 'dying') && e.canvas) {
       const d = (e.x - posX) ** 2 + (e.y - posY) ** 2;
       allSprites.push({ type: 'enemy', data: e, distance: d });
     }
@@ -213,17 +213,64 @@ function drawSprites(zBuf) {
       if (transY <= 0.0001) continue;
 
       const screenX = (W / 2) * (1 + transX / transY);
-      const spriteH = Math.min(H * 0.8, Math.abs((H / transY) * ENEMY_SCALE));
+      let spriteH = Math.min(H * 0.8, Math.abs((H / transY) * ENEMY_SCALE));
+      const originalSpriteH = spriteH; // Keep track of original height
+      
+      // Calculate original width before any squishing
       const aspect = e.canvas.width / e.canvas.height;
-      const spriteW = spriteH * aspect;
-      const drawStartY = Math.max(0, ((-spriteH / 2 + HALF_H) | 0));
-      const drawEndY   = Math.min(H - 1, ((spriteH / 2 + HALF_H) | 0));
+      const originalSpriteW = originalSpriteH * aspect;
+      
+      // Apply squishing effect for dying enemies (height only)
+      if (e.state === 'dying') {
+        // Squish from top down - reduce height as death progresses
+        spriteH *= (1.0 - e.deathProgress);
+      }
+      
+      // Width stays the same for dying enemies, only height changes
+      const spriteW = originalSpriteW;
+      
+      // Adjust drawing position for squishing effect (anchor to bottom)
+      let drawStartY, drawEndY;
+      if (e.state === 'dying') {
+        // For dying enemies, anchor to bottom - keep bottom edge at original position
+        const bottomY = HALF_H + originalSpriteH / 2;
+        drawStartY = Math.max(0, ((bottomY - spriteH) | 0));
+        drawEndY = Math.min(H - 1, (bottomY | 0));
+      } else {
+        // Normal centered positioning
+        drawStartY = Math.max(0, ((-spriteH / 2 + HALF_H) | 0));
+        drawEndY = Math.min(H - 1, ((spriteH / 2 + HALF_H) | 0));
+      }
+      
       const drawStartX = Math.max(0, ((-spriteW / 2 + screenX) | 0));
       const drawEndX   = Math.min(W - 1, ((spriteW / 2 + screenX) | 0));
 
       // Determine which canvas to use
       let drawCanvas = e.canvas;
-      if (e.type === 'ranged' && e.isTelegraphing && e.flashCanvas) {
+      
+      if (e.state === 'dying') {
+        // Lerp between colored and gray canvas based on death progress
+        if (e.deathProgress < 1.0 && e.grayCanvas) {
+          // Create a temporary canvas for color interpolation
+          const tempCanvas = document.createElement('canvas');
+          tempCanvas.width = e.canvas.width;
+          tempCanvas.height = e.canvas.height;
+          const tempCtx = tempCanvas.getContext('2d');
+          
+          // Draw colored version with decreasing opacity
+          tempCtx.globalAlpha = 1.0 - e.deathProgress;
+          tempCtx.drawImage(e.canvas, 0, 0);
+          
+          // Draw gray version with increasing opacity
+          tempCtx.globalAlpha = e.deathProgress;
+          tempCtx.drawImage(e.grayCanvas, 0, 0);
+          
+          tempCtx.globalAlpha = 1.0;
+          drawCanvas = tempCanvas;
+        } else {
+          drawCanvas = e.grayCanvas || e.canvas;
+        }
+      } else if (e.type === 'ranged' && e.isTelegraphing && e.flashCanvas) {
         const telegraphTime = currentTime - e.telegraphStart;
         const flashCycle = (telegraphTime / FLASH_INTERVAL) % 2;
         if (flashCycle < 1) {
