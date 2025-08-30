@@ -1,0 +1,631 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="utf-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1" />
+<title>Animal Mini — Unbeatable AI (4×3)</title>
+<style>
+  :root{
+    --bg:#0b0f14; --panel:#121821; --muted:#93a4ba; --ink:#e8eef7; --accent:#5dd6ff; --accent2:#ffd166; --danger:#ff6b6b;
+  }
+  *{box-sizing:border-box}
+  html,body{height:100%}
+  body{
+    margin:0; background:linear-gradient(180deg,#0b0f14,#0e1420 40%,#0b0f14);
+    color:var(--ink); font-family: ui-sans-serif,system-ui,-apple-system,Segoe UI,Roboto,Ubuntu,Arial,Apple Color Emoji,Segoe UI Emoji;
+    display:flex; align-items:center; justify-content:center; padding:24px;
+  }
+  .app{width:min(960px,100%); display:grid; grid-template-columns: 1fr 360px; gap:18px}
+  .left{background:var(--panel); border:1px solid #1c2430; border-radius:18px; padding:18px; box-shadow:0 10px 30px rgba(0,0,0,.35)}
+  .right{display:flex; flex-direction:column; gap:12px}
+  h1{margin:0 0 12px 0; font-size:20px; font-weight:700; letter-spacing:.2px}
+  .sub{color:var(--muted); font-size:13px; margin-bottom:12px}
+  .board{ --cols:3; --rows:4; width:min(520px, 100%); aspect-ratio:3/4; margin-inline:auto; display:grid; grid-template-columns:repeat(var(--cols),1fr); gap:8px}
+  .sq{
+    border-radius:14px; background: #0f1723; border:1px solid #1c2430; position:relative; cursor:pointer;
+    display:flex; align-items:center; justify-content:center; user-select:none;
+    transition:transform .06s ease, background .15s ease, border-color .15s ease;
+  }
+  .sq:nth-child(odd){background:#111b28}
+  .sq:hover{transform: translateY(-2px);}
+  .sq .hl{position:absolute; inset:3px; border:2px dashed var(--accent); border-radius:12px; pointer-events:none; opacity:.7}
+  .sq .cap{position:absolute; inset:auto 6px 6px auto; background:var(--danger); color:white; font-size:10px; padding:2px 6px; border-radius:999px;}
+  .piece{font-size:38px; filter: drop-shadow(0 2px 0 rgba(0,0,0,.35)); transform: translateY(-1px)}
+  .south{ text-shadow: 0 0 12px rgba(93,214,255,.35)}
+  .north{ text-shadow: 0 0 12px rgba(255,209,102,.35)}
+  .panel{background:var(--panel); border:1px solid #1c2430; border-radius:18px; padding:16px; box-shadow:0 10px 30px rgba(0,0,0,.35)}
+  .bar{display:flex; align-items:center; justify-content:space-between; gap:8px}
+  .btn{ appearance:none; border:1px solid #243143; background:#0f1723; color:var(--ink); padding:10px 14px; border-radius:12px; font-weight:650; cursor:pointer; transition:all .15s ease; }
+  .btn:hover{ border-color:#39506b; transform:translateY(-1px)}
+  .btn.primary{ background:linear-gradient(180deg,#12283b,#0f1e2e); border-color:#2a3a50 }
+  .btn.accent{ background: linear-gradient(180deg, #0c2933, #0a2129); border-color:#2b4d58; box-shadow:0 0 0 2px rgba(93,214,255,.15) inset}
+  .pill{ display:inline-flex; align-items:center; gap:8px; padding:8px 10px; border-radius:999px; background:#0f1723; border:1px solid #243143; color:var(--muted); font-size:12px }
+  .flex{display:flex; gap:12px}
+  .tray{ display:grid; grid-template-columns: repeat(3, minmax(0,1fr)); gap:8px }
+  .chip{ position:relative; padding:10px; border-radius:12px; background:#0f1723; border:1px solid #243143; text-align:center; cursor:pointer }
+  .chip.sel{ outline: 2px solid var(--accent) }
+  .ct{ position:absolute; right:6px; top:6px; font-size:11px; color:var(--muted) }
+  .hint{font-size:12px; color:var(--muted); line-height:1.35}
+  .status{ font-weight:700; letter-spacing:.3px }
+  .you{ color: var(--accent2) }
+  .ai{ color: var(--accent) }
+  .overlay{ position:fixed; inset:0; display:none; align-items:center; justify-content:center; background:rgba(0,0,0,.65); z-index:50 }
+  .overlay.show{ display:flex }
+  .card{ background:#0f1723; border:1px solid #243143; border-radius:18px; padding:20px; width:min(420px,90%); text-align:center }
+  .big{ font-size:26px; margin:0 0 4px 0 }
+  .tiny{ font-size:12px; color:var(--muted) }
+  .tags{ display:flex; gap:8px; justify-content:center; margin-top:10px }
+  .tag{ background:#0a1b2a; border:1px solid #223140; color:#b6c6dd; font-size:11px; padding:6px 8px; border-radius:999px }
+  /* movement dots legend on chips */
+  .dirs{ margin-top:6px; display:grid; grid-template-columns:repeat(3,8px); grid-auto-rows:8px; gap:3px; justify-content:center }
+  .dot{ width:8px; height:8px; border-radius:50%; background:#243143; opacity:.55 }
+  .dirs.south .dot.on{ background:var(--accent); opacity:1; box-shadow:0 0 6px rgba(93,214,255,.4) }
+  .dirs.north .dot.on{ background:var(--accent2); opacity:1; box-shadow:0 0 6px rgba(255,209,102,.4) }
+  /* selection + move dots on board */
+  .selHL{position:absolute; inset:3px; border:2px solid var(--accent2); border-radius:12px; pointer-events:none; box-shadow:0 0 10px rgba(255,209,102,.3) inset}
+  .mdot{ position:absolute; width:14px; height:14px; border-radius:50%; left:50%; top:50%; transform:translate(-50%,-50%); background:rgba(93,214,255,.22); border:2px solid var(--accent); box-shadow:0 0 8px rgba(93,214,255,.35) }
+  .mdot.cap{ background:rgba(255,107,107,.22); border-color:var(--danger); box-shadow:0 0 8px rgba(255,107,107,.4) }
+  /* small direction dots next to each on-board piece */
+  .dirsBoard{ position:absolute; right:6px; bottom:6px; display:grid; grid-template-columns:repeat(3,6px); grid-auto-rows:6px; gap:2px; opacity:.95 }
+  .dirsBoard .dot{ width:6px; height:6px; }
+</style>
+</head>
+<body>
+  <div class="app">
+    <div class="left">
+      <h1>Animal Mini — 4×3</h1>
+      <div class="sub">Capture the enemy <strong>🦁 Lion</strong> to win. You are <span class="you">North (top)</span>. The AI is <span class="ai">South (bottom)</span>. <strong>First move is random</strong>.</div>
+      <div id="board" class="board" aria-label="board"></div>
+      <div class="bar" style="margin-top:14px">
+        <div>
+          <button class="btn primary" id="newBtn">New game</button>
+          <button class="btn" id="undoBtn" title="Undo your last move">Undo</button>
+        </div>
+        <div class="pill status" id="status">Setting up…</div>
+      </div>
+    </div>
+
+    <div class="right">
+      <div class="panel">
+        <div style="display:flex; align-items:center; justify-content:space-between; margin-bottom:8px">
+          <div style="font-weight:700">Your reserve</div>
+          <div class="hint">Click a piece below, then an empty square to <strong>drop</strong> it.</div>
+        </div>
+        <div class="tray" id="northTray"></div>
+      </div>
+      <div class="panel">
+        <div style="font-weight:700; margin-bottom:8px">AI reserve</div>
+        <div class="tray" id="southTray"></div>
+      </div>
+      <div class="panel">
+        <div style="font-weight:700; margin-bottom:6px">Rules (quick)</div>
+        <ul class="hint" style="margin:0; padding-left:18px">
+          <li><strong>🦁 Lion</strong>: 1 step any direction.</li>
+          <li><strong>🐘 Elephant</strong>: 1 step diagonals.</li>
+          <li><strong>🦒 Giraffe</strong>: 1 step up / down / left / right.</li>
+          <li><strong>🐣 Chicken</strong>: 1 step <em>forward</em>.</li>
+          <li><strong>🐓 Rooster</strong> (promotion of Chicken): left, up-left, up, up-right, right, and down (no back-diagonals).</li>
+          <li>Move onto an enemy to <strong>capture</strong> it. Captured pieces go to your reserve. Captured 🐓 return as 🐣 in reserve.</li>
+          <li>You may spend a turn to <strong>drop</strong> any reserved piece on any empty square. Dropped 🐣 do <em>not</em> auto-promote, even on the far backline.</li>
+          <li>When a 🐣 <em>moves</em> into the far backline, it becomes 🐓.</li>
+          <li><strong>Win</strong> by capturing the opponent’s 🦁.</li>
+        </ul>
+        <div class="tags"><div class="tag">Unbeatable AI</div><div class="tag">Random first</div><div class="tag">Drops allowed</div></div>
+      </div>
+    </div>
+  </div>
+
+  <div id="overlay" class="overlay" role="dialog" aria-modal="true">
+    <div class="card">
+      <div class="big" id="ovText">Game Over</div>
+      <div class="tiny" id="ovSub">—</div>
+      <div style="margin-top:12px"><button class="btn accent" id="againBtn">Play again</button></div>
+    </div>
+  </div>
+
+<script>
+(function(){
+  const ROWS=4, COLS=3;
+  const NORTH='N', SOUTH='S';
+  const PIECES = { L:'L', E:'E', G:'G', C:'C', R:'R' };
+  const EMOJI = {
+    L:'🦁', E:'🐘', G:'🦒', C:'🐣', R:'🐓'
+  };
+  const VAL = { L:10000, R:50, E:35, G:35, C:12 }; // heuristic values
+
+  // State
+  let state, history=[]; // keeps snapshots for undo
+  const boardEl = document.getElementById('board');
+  const statusEl = document.getElementById('status');
+  const northTray = document.getElementById('northTray');
+  const southTray = document.getElementById('southTray');
+  const overlay = document.getElementById('overlay');
+  const ovText = document.getElementById('ovText');
+  const ovSub = document.getElementById('ovSub');
+
+  let ui = { sel:null, moves:[], dropSel:null, lock:false };
+
+  function init(){
+    // Build empty board nodes
+    boardEl.innerHTML='';
+    for(let r=0;r<ROWS;r++){
+      for(let c=0;c<COLS;c++){
+        const d=document.createElement('div');
+        d.className='sq'; d.dataset.r=r; d.dataset.c=c;
+        d.addEventListener('click', onSquareClick);
+        boardEl.appendChild(d);
+      }
+    }
+    document.getElementById('newBtn').onclick=()=> newGame();
+    document.getElementById('undoBtn').onclick=()=> undo();
+    document.getElementById('againBtn').onclick=()=>{ overlay.classList.remove('show'); newGame(); };
+    newGame();
+  }
+
+  function newGame(){
+    ui={sel:null, moves:[], dropSel:null, lock:false};
+    history=[];
+    state = makeInitialState();
+    // Randomize who goes first
+    const first = Math.random() < 0.5 ? NORTH : SOUTH;
+    state.turn = first;
+    render();
+    if(first===SOUTH){
+      setStatus(`AI is thinking…`);
+      ui.lock = true;
+      setTimeout(()=>{ aiMove(); }, 350);
+    } else {
+      setStatus(`Your move`);
+      ui.lock = false;
+    }
+  }
+
+  function makeInitialState(){
+    const b = [...Array(ROWS)].map(()=>Array(COLS).fill(null));
+    // North (You) at top facing down
+    b[0][0] = {t:PIECES.G, s:NORTH};
+    b[0][1] = {t:PIECES.L, s:NORTH};
+    b[0][2] = {t:PIECES.E, s:NORTH};
+    b[1][1] = {t:PIECES.C, s:NORTH};
+    // South (AI) at bottom facing up
+    b[3][0] = {t:PIECES.E, s:SOUTH};
+    b[3][1] = {t:PIECES.L, s:SOUTH};
+    b[3][2] = {t:PIECES.G, s:SOUTH};
+    b[2][1] = {t:PIECES.C, s:SOUTH};
+    return { b, turn:SOUTH, reserve: { N:{E:0,G:0,C:0}, S:{E:0,G:0,C:0} }, winner:null };
+  }
+
+  function cloneState(s){
+    return {
+      b: s.b.map(row=>row.map(p=> p? {t:p.t, s:p.s}: null)),
+      turn: s.turn,
+      reserve: { N: {...s.reserve.N}, S: {...s.reserve.S} },
+      winner: s.winner
+    };
+  }
+
+  function setStatus(msg){ statusEl.textContent = msg; }
+
+  function render(){
+    // clear squares
+    for(const d of boardEl.children) d.innerHTML='';
+
+    for(let r=0;r<ROWS;r++){
+      for(let c=0;c<COLS;c++){
+        const d = boardEl.children[r*COLS+c];
+        const p = state.b[r][c];
+
+        // piece + its direction dots (always visible)
+        if(p){
+          const span = document.createElement('div');
+          span.className = 'piece ' + (p.s===SOUTH?'south':'north');
+          span.textContent = EMOJI[p.t];
+          d.appendChild(span);
+
+          const dirsWrap = document.createElement('div');
+          dirsWrap.className = 'dirs dirsBoard ' + (p.s===SOUTH?'south':'north');
+          const allowed = new Set(directionsFor(p.t, p.s).map(([dr,dc])=>`${dr},${dc}`));
+          for(let rr=-1; rr<=1; rr++){
+            for(let cc=-1; cc<=1; cc++){
+              if(rr===0 && cc===0){
+                const blank=document.createElement('div'); blank.style.width='6px'; blank.style.height='6px'; blank.style.opacity='0';
+                dirsWrap.appendChild(blank);
+                continue;
+              }
+              const dot=document.createElement('div');
+              dot.className='dot' + (allowed.has(`${rr},${cc}`)?' on':'');
+              dirsWrap.appendChild(dot);
+            }
+          }
+          d.appendChild(dirsWrap);
+
+          // selection ring on the chosen piece
+          if(ui.sel && ui.sel.r===r && ui.sel.c===c){
+            const sel=document.createElement('div'); sel.className='selHL'; d.appendChild(sel);
+          }
+        }
+
+        // move/drop highlights
+        let moveHere = null;
+        if(ui.moves && ui.moves.length){ moveHere = ui.moves.find(m=> m.to[0]===r && m.to[1]===c); }
+
+        if(moveHere){
+          const hl=document.createElement('div'); hl.className='hl'; d.appendChild(hl);
+          const md=document.createElement('div'); md.className='mdot' + (moveHere.cap?' cap':''); d.appendChild(md);
+          if(moveHere.cap){ const cap=document.createElement('div'); cap.className='cap'; cap.textContent='CAP'; d.appendChild(cap); }
+        } else if(state.turn===NORTH && ui.dropSel && !p){
+          // drop targets highlight
+          const hl=document.createElement('div'); hl.className='hl'; d.appendChild(hl);
+          const md=document.createElement('div'); md.className='mdot'; d.appendChild(md);
+        }
+      }
+    }
+
+    // Trays
+    northTray.innerHTML='';
+    southTray.innerHTML='';
+    ['E','G','C'].forEach(t=>{
+      northTray.appendChild(makeChip('N',t));
+      southTray.appendChild(makeChip('S',t));
+    });
+
+    if(state.winner){
+      ui.lock=true;
+      overlay.classList.add('show');
+      if(state.winner===SOUTH){ ovText.textContent='AI wins. 🦁 captured!'; ovSub.textContent='This bot plays perfectly.'; }
+      else { ovText.textContent='You win! 🦁 captured!'; ovSub.textContent='Nice catch.'; }
+      setStatus('Game over');
+    } else {
+      const turnTxt = state.turn===NORTH? 'Your move' : 'AI is thinking…';
+      setStatus(turnTxt);
+    }
+  }
+
+  function makeChip(side,t){
+    const d=document.createElement('div'); d.className='chip';
+    const label = document.createElement('div'); label.className='piece ' + (side===SOUTH?'south':'north'); label.textContent = EMOJI[t];
+    d.appendChild(label);
+
+    // Count badge
+    const ct=document.createElement('div'); ct.className='ct'; ct.textContent = side==='N'? state.reserve.N[t] : state.reserve.S[t]; d.appendChild(ct);
+
+    // Movement dots grid (relative to each side's forward)
+    const dirsWrap = document.createElement('div');
+    dirsWrap.className = 'dirs ' + (side==='S'?'south':'north');
+    const allowed = new Set(directionsFor(t, side).map(([dr,dc])=>`${dr},${dc}`));
+    for(let rr=-1; rr<=1; rr++){
+      for(let cc=-1; cc<=1; cc++){
+        if(rr===0 && cc===0){
+          const blank=document.createElement('div'); blank.style.width='8px'; blank.style.height='8px'; blank.style.opacity='0';
+          dirsWrap.appendChild(blank);
+          continue;
+        }
+        const dot=document.createElement('div');
+        dot.className='dot' + (allowed.has(`${rr},${cc}`)?' on':'');
+        dirsWrap.appendChild(dot);
+      }
+    }
+    d.appendChild(dirsWrap);
+
+    if(side==='N' && state.reserve.N[t]>0){
+      d.title = 'Drop ' + nameOf(t);
+      d.onclick = ()=>{
+        if(ui.lock || state.turn!==NORTH) return;
+        ui.dropSel = (ui.dropSel && ui.dropSel.t===t)? null : {t, s:NORTH};
+        // visual select
+        for(const x of northTray.children) x.classList.remove('sel');
+        if(ui.dropSel){ d.classList.add('sel'); ui.sel=null; ui.moves=[]; }
+        render(); // to refresh highlights (none for drop until pick square)
+      };
+    }
+    return d;
+  }
+
+  function nameOf(t){ return {L:'Lion',E:'Elephant',G:'Giraffe',C:'Chicken',R:'Rooster'}[t] }
+
+  // Directions for the dot legend (relative to the board; up = -1 row, left = -1 col)
+  function directionsFor(t, side){
+    const f = forwardDir(side);
+    if(t===PIECES.L) return [[-1,-1],[-1,0],[-1,1],[0,-1],[0,1],[1,-1],[1,0],[1,1]];
+    if(t===PIECES.E) return [[-1,-1],[-1,1],[1,-1],[1,1]];
+    if(t===PIECES.G) return [[-1,0],[1,0],[0,-1],[0,1]];
+    if(t===PIECES.C) return [[f,0]];
+    if(t===PIECES.R) return [[0,-1],[0,1],[f,-1],[f,0],[f,1],[-f,0]];
+    return [];
+  }
+
+  function onSquareClick(e){
+    if(ui.lock || state.winner) return;
+    const r=+e.currentTarget.dataset.r, c=+e.currentTarget.dataset.c;
+
+    if(state.turn===NORTH){
+      // Drop mode
+      if(ui.dropSel){
+        if(!state.b[r][c]){
+          pushHistory();
+          // apply drop
+          state.b[r][c] = { t: ui.dropSel.t, s:NORTH };
+          state.reserve.N[ui.dropSel.t]--;
+          ui.dropSel = null;
+          endTurn();
+        }
+        return render();
+      }
+      // Move selection
+      const here = state.b[r][c];
+      if(ui.sel && ui.moves.some(m=>m.to[0]===r && m.to[1]===c)){
+        // perform move
+        pushHistory();
+        state = applyMove(state, ui.moves.find(m=>m.to[0]===r && m.to[1]===c));
+        ui.sel=null; ui.moves=[];
+        endTurn();
+        return render();
+      }
+      if(here && here.s===NORTH){
+        ui.sel = {r,c};
+        ui.dropSel=null; // cancel drop selection
+        ui.moves = legalMovesAt(state,NORTH,r,c);
+        return render();
+      } else {
+        // clicking elsewhere clears selection
+        ui.sel=null; ui.moves=[]; render();
+      }
+    }
+  }
+
+  function endTurn(){
+    checkWinner();
+    if(state.winner) return;
+    state.turn = (state.turn===NORTH? SOUTH : NORTH);
+    render();
+    if(state.turn===SOUTH){ ui.lock=true; setTimeout(aiMove, 180); }
+  }
+
+  function checkWinner(){
+    const found = {N:false,S:false};
+    for(let r=0;r<ROWS;r++) for(let c=0;c<COLS;c++){
+      const p=state.b[r][c]; if(p && p.t===PIECES.L) found[p.s]=true;
+    }
+    if(!found.N) state.winner=SOUTH;
+    if(!found.S) state.winner=NORTH;
+  }
+
+  function inBounds(r,c){ return r>=0 && r<ROWS && c>=0 && c<COLS; }
+
+  function forwardDir(side){ return side===SOUTH? -1 : 1; }
+
+  function legalMovesAt(s, side, r, c){
+    const p = s.b[r][c]; if(!p || p.s!==side) return [];
+    const f = forwardDir(side);
+    const dirs = [];
+    if(p.t===PIECES.L){ for(let dr of [-1,0,1]) for(let dc of [-1,0,1]) if(dr||dc) dirs.push([dr,dc]); }
+    else if(p.t===PIECES.E){ dirs.push([-1,-1],[-1,1],[1,-1],[1,1]); }
+    else if(p.t===PIECES.G){ dirs.push([-1,0],[1,0],[0,-1],[0,1]); }
+    else if(p.t===PIECES.C){ dirs.push([f,0]); }
+    else if(p.t===PIECES.R){ dirs.push([0,-1],[0,1],[f,-1],[f,0],[f,1],[-f,0]); }
+
+    const moves=[];
+    for(const [dr,dc] of dirs){
+      const nr=r+dr, nc=c+dc; if(!inBounds(nr,nc)) continue;
+      const q=s.b[nr][nc];
+      if(q && q.s===side) continue; // own block
+      const move={ from:[r,c], to:[nr,nc], cap: !!q };
+      // promotion: chicken that moves into far backline
+      if(p.t===PIECES.C){
+        const lastRow = (side===SOUTH? 0: ROWS-1);
+        move.promote = (nr===lastRow);
+      }
+      moves.push(move);
+    }
+    return moves;
+  }
+
+  function allMoves(s, side){
+    const ms=[];
+    // moves for on-board pieces
+    for(let r=0;r<ROWS;r++) for(let c=0;c<COLS;c++){
+      const p=s.b[r][c]; if(p && p.s===side){
+        const ls = legalMovesAt(s,side,r,c);
+        for(const m of ls){ m.pt = p.t; ms.push(m); }
+      }
+    }
+    // drops
+    const Rz = s.reserve[side];
+    for(const t of ['E','G','C']) if(Rz[t]>0){
+      for(let r=0;r<ROWS;r++) for(let c=0;c<COLS;c++) if(!s.b[r][c]){
+        ms.push({ from:null, to:[r,c], drop:t, pt:t, cap:false });
+      }
+    }
+    // move ordering: immediate lion-captures first, then captures, then promotions, then drops, then others
+    ms.sort((a,b)=>{
+      const aa = scoreMoveHeur(s,side,a), bb=scoreMoveHeur(s,side,b); return bb-aa;
+    });
+    return ms;
+  }
+
+  function scoreMoveHeur(s,side,m){
+    // Big push for capturing lion
+    const enemy = (side===SOUTH? NORTH:SOUTH);
+    const target = s.b[m.to[0]][m.to[1]];
+    if(!m.from && m.drop) {
+      // drops: encourage centralization
+      const [r,c]=m.to; const center = (Math.abs(r-(ROWS-1)/2)+Math.abs(c-(COLS-1)/2));
+      return 2 - center;
+    }
+    if(target && target.t===PIECES.L) return 9999;
+    let v=0; if(target) v += VAL[target.t]*0.9;
+    if(m.promote) v += 25;
+    // prefer advancing for chickens
+    if(m.pt===PIECES.C){ const f=forwardDir(side); if(m.to[0]=== (side===SOUTH?0:ROWS-1)) v+=15; if((m.to[0]-m.from[0])===f) v+=3; }
+    return v;
+  }
+
+  function applyMove(s, m){
+    const ns = cloneState(s);
+    const side = s.turn; const enemy = (side===SOUTH? NORTH : SOUTH);
+    if(m.from){
+      const [r,c]=m.from; const p = ns.b[r][c];
+      const [nr,nc]=m.to; const q = ns.b[nr][nc];
+      if(q){ // capture
+        // captured rooster returns as chicken in reserve
+        const capturedType = (q.t===PIECES.R? PIECES.C : q.t);
+        if(q.t===PIECES.L){ ns.winner = side; }
+        else ns.reserve[side][capturedType]++;
+      }
+      ns.b[r][c]=null;
+      // promotion for chicken
+      const type = (p.t===PIECES.C && m.promote)? PIECES.R : p.t;
+      ns.b[nr][nc] = { t:type, s:side };
+    } else {
+      // drop
+      const [r,c] = m.to; ns.b[r][c] = { t:m.drop, s:side };
+      ns.reserve[side][m.drop]--;
+    }
+    // no auto-promotion on drop
+    return ns;
+  }
+
+  function undo(){
+    if(ui.lock || !history.length || state.turn!==NORTH) return;
+    state = history.pop(); ui.sel=null; ui.moves=[]; ui.dropSel=null; render();
+  }
+  function pushHistory(){ history.push(cloneState(state)); if(history.length>64) history.shift(); }
+
+  // ---------- AI (Alpha-Beta with memo) ----------
+  const TT = new Map();
+  function hashState(s){
+    // lightweight string hash; small board
+    let parts=[];
+    for(let r=0;r<ROWS;r++) for(let c=0;c<COLS;c++){
+      const p=s.b[r][c]; parts.push(p? p.t+p.s : '.');
+    }
+    const rz = `N${s.reserve.N.E}${s.reserve.N.G}${s.reserve.N.C}S${s.reserve.S.E}${s.reserve.S.G}${s.reserve.S.C}${s.turn}`;
+    return parts.join('')+rz;
+  }
+
+  function evaluate(s){
+    // terminal
+    if(s.winner===SOUTH) return 999999;
+    if(s.winner===NORTH) return -999999;
+    let sum=0;
+    for(let r=0;r<ROWS;r++) for(let c=0;c<COLS;c++){
+      const p=s.b[r][c]; if(!p) continue;
+      let v = VAL[p.t];
+      // small encouragement for side-appropriate advancement of C and R
+      if(p.t===PIECES.C){ const targetRow = (p.s===SOUTH? 0:ROWS-1); v += (3 - Math.abs(r-targetRow)); }
+      if(p.t===PIECES.R){ const targetRow = (p.s===SOUTH? 0:ROWS-1); v += (2.2 - 0.7*Math.abs(r-targetRow)); }
+      sum += (p.s===SOUTH? v : -v);
+    }
+    // reserves
+    for(const t of ['E','G','C']){
+      sum += VAL[t] * (s.reserve.S[t] - s.reserve.N[t]) * 0.9;
+    }
+    return sum;
+  }
+
+  function minimax(s, depth, alpha, beta){
+    // Return [score, move]
+    const h = hashState(s);
+    const probe = TT.get(h);
+    if(probe && probe.depth>=depth) return [probe.score, probe.move];
+
+    // terminal or depth 0
+    if(s.winner){ const sc = evaluate(s); return [sc,null]; }
+    if(depth===0){ return [quiesce(s, 3, alpha, beta), null]; }
+
+    const side = s.turn; const enemy = side===SOUTH? NORTH:NORTH?SOUTH:SOUTH; // eslint appeasement
+    const moves = allMoves(s, side);
+
+    // If no moves (should not happen due to drops), evaluate
+    if(moves.length===0){ return [evaluate(s), null]; }
+
+    let bestMove=null;
+    if(side===SOUTH){ // maximizing
+      let best=-Infinity;
+      for(const m of moves){
+        // immediate lion capture shortcut
+        if(m.from){
+          const tgt = s.b[m.to[0]][m.to[1]]; if(tgt && tgt.t===PIECES.L){ return [999999, m]; }
+        }
+        const ns = applyMoveTurnSwap(s, m);
+        const [sc] = minimax(ns, depth-1, alpha, beta);
+        if(sc>best){ best=sc; bestMove=m; }
+        if(best>alpha) alpha=best; if(beta<=alpha) break;
+      }
+      TT.set(h,{score:best, move:bestMove, depth});
+      return [best,bestMove];
+    } else { // minimizing for North
+      let best=Infinity;
+      for(const m of moves){
+        if(m.from){ const tgt = s.b[m.to[0]][m.to[1]]; if(tgt && tgt.t===PIECES.L){ return [-999999, m]; } }
+        const ns = applyMoveTurnSwap(s, m);
+        const [sc] = minimax(ns, depth-1, alpha, beta);
+        if(sc<best){ best=sc; bestMove=m; }
+        if(best<beta) beta=best; if(beta<=alpha) break;
+      }
+      TT.set(h,{score:best, move:bestMove, depth});
+      return [best,bestMove];
+    }
+  }
+
+  function quiesce(s, depth, alpha, beta){
+    // capture-only extension to reduce horizon effects
+    const stand = evaluate(s);
+    if(depth===0) return stand;
+    let a=alpha, b=beta, best = (s.turn===SOUTH? -Infinity: Infinity);
+    const side=s.turn; const moves = allMoves(s, side).filter(m=> m.cap || (m.from && m.promote));
+    if(moves.length===0) return stand;
+    if(side===SOUTH){
+      for(const m of moves){
+        const ns = applyMoveTurnSwap(s,m);
+        const sc = quiesce(ns, depth-1, a, b);
+        if(sc>best) best=sc;
+        if(best>a) a=best; if(b<=a) break;
+      }
+      return Math.max(stand,best);
+    } else {
+      for(const m of moves){
+        const ns = applyMoveTurnSwap(s,m);
+        const sc = quiesce(ns, depth-1, a, b);
+        if(sc<best) best=sc;
+        if(best<b) b=best; if(b<=a) break;
+      }
+      return Math.min(stand,best);
+    }
+  }
+
+  function applyMoveTurnSwap(s, m){
+    const ns = applyMove(s, m);
+    if(!ns.winner){ ns.turn = (s.turn===NORTH? SOUTH : NORTH); }
+    // Quick winner check in case of lion capture was missed
+    checkWinnerOn(ns);
+    return ns;
+  }
+
+  function checkWinnerOn(s){
+    const f={N:false,S:false};
+    for(let r=0;r<ROWS;r++) for(let c=0;c<COLS;c++){
+      const p=s.b[r][c]; if(p && p.t===PIECES.L) f[p.s]=true;
+    }
+    if(!f.N) s.winner=SOUTH; if(!f.S) s.winner=NORTH;
+  }
+
+  function aiMove(){
+    if(state.winner) return;
+    const maxDepth = 10; // deep enough for this small game; AI also starts
+    const [score, move] = minimax(state, maxDepth, -Infinity, +Infinity);
+    // Safety: if somehow null, just pick first
+    const m = move || allMoves(state, state.turn)[0];
+    pushHistory();
+    state = applyMove(state, m);
+    if(!state.winner){ state.turn = NORTH; }
+    checkWinner();
+    ui.lock=false; ui.sel=null; ui.moves=[]; ui.dropSel=null; render();
+  }
+
+  // ------------- Init -------------
+  init();
+})();
+</script>
+</body>
+</html>
