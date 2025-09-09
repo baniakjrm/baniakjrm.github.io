@@ -1,0 +1,541 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1" />
+  <title>Stronghold Finder (HTML)</title>
+  <style>
+    :root {
+      --bg: #0b0f14;
+      --panel: #111826;
+      --soft: #1a2333;
+      --text: #e8f0ff;
+      --muted: #a8b3c7;
+      --accent: #8bcdff;
+      --accent-2: #6df0c2;
+      --danger: #ff6b6b;
+    }
+    * { box-sizing: border-box; }
+    html, body { height: 100%; }
+    body {
+      margin: 0;
+      background: radial-gradient(1200px 900px at 20% -10%, #1a2333 0, #0b0f14 60%), var(--bg);
+      color: var(--text);
+      font: 15px/1.45 system-ui, -apple-system, Segoe UI, Roboto, Ubuntu, Cantarell, Noto Sans, Arial, "Apple Color Emoji", "Segoe UI Emoji";
+    }
+    .container {
+      max-width: 1120px;
+      margin: 32px auto;
+      padding: 0 20px 40px;
+    }
+    header {
+      display: flex;
+      align-items: baseline;
+      gap: 16px;
+      margin-bottom: 18px;
+    }
+    h1 { margin: 0; font-size: 28px; letter-spacing: 0.2px; }
+    .sub { color: var(--muted); }
+
+    .card {
+      background: linear-gradient(180deg, rgba(255,255,255,0.04), rgba(255,255,255,0.02));
+      border: 1px solid rgba(255,255,255,0.08);
+      border-radius: 16px;
+      padding: 16px;
+      box-shadow: 0 12px 24px rgba(0,0,0,0.25);
+    }
+
+    form .grid {
+      display: grid;
+      grid-template-columns: repeat(4, minmax(140px, 1fr));
+      gap: 12px;
+    }
+    @media (max-width: 820px) {
+      form .grid { grid-template-columns: repeat(2, 1fr); }
+    }
+    label {
+      display: grid;
+      gap: 6px;
+      color: var(--muted);
+      font-weight: 600;
+      font-size: 13px;
+    }
+    input[type="number"] {
+      width: 100%;
+      padding: 10px 12px;
+      border-radius: 12px;
+      border: 1px solid rgba(255,255,255,0.12);
+      background: var(--panel);
+      color: var(--text);
+      outline: none;
+    }
+    input[type="number"]:focus {
+      border-color: var(--accent);
+      box-shadow: 0 0 0 4px rgba(139,205,255,0.15);
+    }
+    .actions {
+      margin-top: 12px;
+      display: flex;
+      gap: 10px;
+      flex-wrap: wrap;
+    }
+    button {
+      appearance: none;
+      border: 1px solid rgba(255,255,255,0.14);
+      padding: 10px 14px;
+      border-radius: 12px;
+      background: linear-gradient(180deg, #1a2233, #151c2a);
+      color: var(--text);
+      font-weight: 600;
+      cursor: pointer;
+      transition: transform .04s ease, box-shadow .2s ease, border-color .2s ease;
+    }
+    button:hover { border-color: var(--accent); box-shadow: 0 10px 20px rgba(0,0,0,0.25); }
+    button:active { transform: translateY(1px); }
+    .ghost { background: transparent; }
+    .danger { border-color: rgba(255,107,107,0.4); color: #ffdede; }
+
+    #estimateBox {
+      margin-top: 16px;
+      display: grid;
+      grid-template-columns: 1fr;
+      gap: 6px;
+    }
+    #estimateText {
+      font-size: 22px;
+      font-weight: 800;
+      letter-spacing: 0.3px;
+    }
+    #detailText { color: var(--muted); }
+
+    .layout {
+      margin-top: 18px;
+      display: grid;
+      grid-template-columns: 1.2fr .8fr;
+      gap: 16px;
+    }
+    @media (max-width: 980px) { .layout { grid-template-columns: 1fr; } }
+
+    canvas {
+      width: 100%;
+      height: 520px;
+      border-radius: 16px;
+      background: radial-gradient(900px 600px at 50% -30%, rgba(109,240,194,0.05), transparent 60%), var(--soft);
+      border: 1px solid rgba(255,255,255,0.08);
+      display: block;
+    }
+
+    table {
+      width: 100%;
+      border-collapse: collapse;
+      font-size: 14px;
+      overflow: hidden;
+      border-radius: 16px;
+      border: 1px solid rgba(255,255,255,0.08);
+      background: rgba(0,0,0,0.15);
+    }
+    thead th {
+      text-align: left;
+      color: var(--muted);
+      padding: 10px 12px;
+      background: rgba(255,255,255,0.03);
+      position: sticky; top: 0;
+    }
+    tbody td {
+      padding: 10px 12px;
+      border-top: 1px solid rgba(255,255,255,0.06);
+    }
+    .mono { font-family: ui-monospace, SFMono-Regular, Menlo, Consolas, "Liberation Mono", monospace; }
+    footer { margin-top: 22px; color: var(--muted); font-size: 13px; }
+    .badge { padding: 2px 8px; border-radius: 999px; border: 1px solid rgba(255,255,255,0.14); color: var(--muted); font-size: 12px; }
+  </style>
+</head>
+<body>
+  <div class="container">
+    <header>
+      <h1>Stronghold Finder</h1>
+      <span class="badge">Least‑Squares Triangulation</span>
+      <span class="sub">Add Eye throws and get a live best guess.</span>
+    </header>
+
+    <section class="card">
+      <form id="entryForm" autocomplete="off">
+        <div class="grid">
+          <label>Pearl <span id="pearlNum">1</span> thrown at x?
+            <input name="tx" id="tx" type="number" step="any" required />
+          </label>
+          <label>Pearl <span id="pearlNum2">1</span> thrown at z?
+            <input name="tz" id="tz" type="number" step="any" required />
+          </label>
+          <label>Pearl <span id="pearlNum3">1</span> landed at x?
+            <input name="lx" id="lx" type="number" step="any" required />
+          </label>
+          <label>Pearl <span id="pearlNum4">1</span> landed at z?
+            <input name="lz" id="lz" type="number" step="any" required />
+          </label>
+        </div>
+        <div class="actions">
+          <button type="submit">Add Throw</button>
+          <button type="button" id="undoBtn" class="ghost">Undo Last</button>
+          <button type="button" id="clearBtn" class="ghost danger">Clear All</button>
+        </div>
+      </form>
+
+      <div id="estimateBox">
+        <div id="estimateText">Best Estimate Stronghold so far: —</div>
+        <div id="detailText">Enter at least 2 throws that aren't parallel to each other for a good fix.</div>
+      </div>
+    </section>
+
+    <div class="layout">
+      <section class="card">
+        <canvas id="plot" width="900" height="520" aria-label="Map visualization of throws and estimate"></canvas>
+      </section>
+      <section class="card" style="overflow:auto; max-height: 560px;">
+        <table>
+          <thead>
+            <tr>
+              <th>#</th>
+              <th>Thrown (x,z)</th>
+              <th>Landed (x,z)</th>
+              <th>Dir°</th>
+              <th>Len</th>
+            </tr>
+          </thead>
+          <tbody id="rows"></tbody>
+        </table>
+      </section>
+    </div>
+
+    <footer>
+      Tip: spreading out your throw positions reduces parallel lines and tightens the estimate. Typical portal rooms are around Y 20–35, but this tool estimates X/Z only.
+    </footer>
+  </div>
+
+<script>
+(function(){
+  'use strict';
+
+  const form = document.getElementById('entryForm');
+  const txEl = document.getElementById('tx');
+  const tzEl = document.getElementById('tz');
+  const lxEl = document.getElementById('lx');
+  const lzEl = document.getElementById('lz');
+  const rows = document.getElementById('rows');
+  const undoBtn = document.getElementById('undoBtn');
+  const clearBtn = document.getElementById('clearBtn');
+  const pearlNumEls = [
+    document.getElementById('pearlNum'),
+    document.getElementById('pearlNum2'),
+    document.getElementById('pearlNum3'),
+    document.getElementById('pearlNum4'),
+  ];
+  const estimateText = document.getElementById('estimateText');
+  const detailText = document.getElementById('detailText');
+  const canvas = document.getElementById('plot');
+  const ctx = canvas.getContext('2d');
+
+  /** Data model **/
+  const rays = []; // {ax, az, ux, uz, len}
+
+  function addRay(ax, az, bx, bz){
+    const dx = bx - ax;
+    const dz = bz - az;
+    const n = Math.hypot(dx, dz);
+    if (n < 1e-9) throw new Error('Throw and land points are identical or too close.');
+    const ux = dx / n;
+    const uz = dz / n;
+    rays.push({ ax, az, ux, uz, len: n });
+  }
+
+  function updatePearlLabel(){
+    const k = rays.length + 1;
+    for (const el of pearlNumEls) el.textContent = String(k);
+  }
+
+  function toNum(el){ return Number(el.value); }
+
+  form.addEventListener('submit', (e) => {
+    e.preventDefault();
+    const ax = toNum(txEl), az = toNum(tzEl), bx = toNum(lxEl), bz = toNum(lzEl);
+    if (!isFinite(ax) || !isFinite(az) || !isFinite(bx) || !isFinite(bz)) {
+      alert('Please enter numbers for all four fields.');
+      return;
+    }
+    try {
+      addRay(ax, az, bx, bz);
+      appendRow(ax, az, bx, bz);
+      updatePearlLabel();
+      computeAndRender();
+      // prepare for next quick entry: keep thrown fields focused
+      txEl.value = tzEl.value = lxEl.value = lzEl.value = '';
+      txEl.focus();
+    } catch (err){
+      alert(err.message || String(err));
+    }
+  });
+
+  undoBtn.addEventListener('click', () => {
+    if (!rays.length) return;
+    rays.pop();
+    rows.removeChild(rows.lastElementChild);
+    updatePearlLabel();
+    computeAndRender();
+  });
+
+  clearBtn.addEventListener('click', () => {
+    if (!rays.length) return;
+    if (!confirm('Clear all throws?')) return;
+    rays.length = 0;
+    rows.innerHTML = '';
+    updatePearlLabel();
+    computeAndRender();
+  });
+
+  function appendRow(ax, az, bx, bz){
+    const dx = bx - ax, dz = bz - az;
+    const len = Math.hypot(dx, dz);
+    const theta = Math.atan2(dz, dx) * 180/Math.PI; // math angle
+    const bearing = (theta + 360) % 360; // 0=east, 90=north
+
+    const tr = document.createElement('tr');
+    tr.innerHTML = `
+      <td class="mono">${rays.length}</td>
+      <td class="mono">${fmt(ax)}, ${fmt(az)}</td>
+      <td class="mono">${fmt(bx)}, ${fmt(bz)}</td>
+      <td class="mono">${bearing.toFixed(1)}°</td>
+      <td class="mono">${len.toFixed(2)}</td>`;
+    rows.appendChild(tr);
+  }
+
+  function fmt(x){ return Number(x).toFixed(3); }
+
+  /** Math: least-squares line intersection **/
+  function leastSquares(rays){
+    let A11=0, A12=0, A22=0, b1=0, b2=0;
+    for (const r of rays){
+      const ux=r.ux, uz=r.uz; const ax=r.ax, az=r.az;
+      const p11 = 1 - ux*ux;
+      const p12 = - ux*uz;
+      const p22 = 1 - uz*uz;
+      A11 += p11; A12 += p12; A22 += p22;
+      b1  += p11*ax + p12*az;
+      b2  += p12*ax + p22*az;
+    }
+    const det = A11*A22 - A12*A12;
+    if (Math.abs(det) < 1e-9) return null;
+    const inv11 =  A22/det;
+    const inv12 = -A12/det;
+    const inv22 =  A11/det;
+    const x = inv11*b1 + inv12*b2;
+    const z = inv12*b1 + inv22*b2;
+    return {x, z};
+  }
+
+  function cross(ax, az, bx, bz){ return ax*bz - az*bx; }
+
+  function lineIntersect(r1, r2){
+    const denom = cross(r1.ux, r1.uz, r2.ux, r2.uz);
+    if (Math.abs(denom) < 1e-9) return null;
+    const t = cross(r2.ax - r1.ax, r2.az - r1.az, r2.ux, r2.uz) / denom;
+    const ix = r1.ax + t*r1.ux;
+    const iz = r1.az + t*r1.uz;
+    const w  = Math.abs(denom);
+    return {x: ix, z: iz, w};
+  }
+
+  function fallbackPairwise(rays){
+    const pts = [];
+    for (let i=0;i<rays.length;i++){
+      for (let j=i+1;j<rays.length;j++){
+        const hit = lineIntersect(rays[i], rays[j]);
+        if (hit) pts.push(hit);
+      }
+    }
+    if (!pts.length) return null;
+    let wsum=0, x=0, z=0;
+    for (const p of pts){ wsum+=p.w; x+=p.x*p.w; z+=p.z*p.w; }
+    return {x:x/wsum, z:z/wsum};
+  }
+
+  function rmsToLines(pt, rays){
+    let acc=0;
+    for (const r of rays){
+      const crossMag = (pt.x - r.ax)*r.uz - (pt.z - r.az)*r.ux; // |u|=1
+      acc += crossMag*crossMag;
+    }
+    return Math.sqrt(acc / Math.max(1, rays.length));
+  }
+
+  function bestEstimate(rays){
+    if (!rays.length) return null;
+    let p = leastSquares(rays);
+    if (!p) p = fallbackPairwise(rays);
+    return p;
+  }
+
+  /** Render **/
+  function computeAndRender(){
+    const p = bestEstimate(rays);
+    if (!p){
+      estimateText.textContent = 'Best Estimate Stronghold so far: —';
+      detailText.textContent = (rays.length < 2)
+        ? 'Need at least two non-parallel throws.'
+        : 'Throws are nearly parallel; add more from a different angle.';
+      draw(null, 0);
+      return;
+    }
+    const rms = rmsToLines(p, rays);
+    const radius = Math.max(8, Math.min(256, 2*rms));
+    estimateText.textContent = `Best Estimate Stronghold so far: [${Math.round(p.x)}, ${Math.round(p.z)}]`;
+    detailText.textContent = `precise: x=${p.x.toFixed(3)}, z=${p.z.toFixed(3)}, ±${radius.toFixed(1)} blocks  ·  rays=${rays.length}`;
+    draw(p, radius);
+  }
+
+  function bounds(p, radius){
+    let minX=Infinity, maxX=-Infinity, minZ=Infinity, maxZ=-Infinity;
+    for (const r of rays){
+      minX = Math.min(minX, r.ax);
+      maxX = Math.max(maxX, r.ax);
+      minZ = Math.min(minZ, r.az);
+      maxZ = Math.max(maxZ, r.az);
+      // also include a point further along the ray for framing
+      minX = Math.min(minX, r.ax + r.ux*2000);
+      maxX = Math.max(maxX, r.ax + r.ux*2000);
+      minZ = Math.min(minZ, r.az + r.uz*2000);
+      maxZ = Math.max(maxZ, r.az + r.uz*2000);
+    }
+    if (p){
+      minX = Math.min(minX, p.x - radius);
+      maxX = Math.max(maxX, p.x + radius);
+      minZ = Math.min(minZ, p.z - radius);
+      maxZ = Math.max(maxZ, p.z + radius);
+    }
+    if (!isFinite(minX)) { minX=-100; maxX=100; minZ=-100; maxZ=100; }
+    // pad
+    const padX = (maxX-minX)||1; const padZ=(maxZ-minZ)||1;
+    minX -= padX*0.08; maxX += padX*0.08; minZ -= padZ*0.08; maxZ += padZ*0.08;
+    return {minX,maxX,minZ,maxZ};
+  }
+
+  function worldToScreen(x, z, B){
+    const w = canvas.width, h = canvas.height;
+    const sx = (x - B.minX) / (B.maxX - B.minX) * w;
+    const sy = h - (z - B.minZ) / (B.maxZ - B.minZ) * h;
+    return [sx, sy];
+  }
+
+  function drawGrid(B){
+    const w = canvas.width, h = canvas.height;
+    ctx.clearRect(0,0,w,h);
+    ctx.save();
+
+    // Grid step selection (nice numbers)
+    const targetLines = 10;
+    const stepX = niceStep(B.maxX - B.minX, targetLines);
+    const stepZ = niceStep(B.maxZ - B.minZ, targetLines);
+
+    ctx.lineWidth = 1;
+    ctx.strokeStyle = 'rgba(255,255,255,0.08)';
+
+    // verticals
+    const startX = Math.ceil(B.minX/stepX)*stepX;
+    for (let x=startX; x<=B.maxX+1e-6; x+=stepX){
+      const [sx1, sy1] = worldToScreen(x, B.minZ, B);
+      const [sx2, sy2] = worldToScreen(x, B.maxZ, B);
+      ctx.beginPath(); ctx.moveTo(sx1, sy1); ctx.lineTo(sx2, sy2); ctx.stroke();
+    }
+    // horizontals
+    const startZ = Math.ceil(B.minZ/stepZ)*stepZ;
+    for (let z=startZ; z<=B.maxZ+1e-6; z+=stepZ){
+      const [sx1, sy1] = worldToScreen(B.minX, z, B);
+      const [sx2, sy2] = worldToScreen(B.maxX, z, B);
+      ctx.beginPath(); ctx.moveTo(sx1, sy1); ctx.lineTo(sx2, sy2); ctx.stroke();
+    }
+
+    // axes labels (sparse)
+    ctx.fillStyle = 'rgba(255,255,255,0.45)';
+    ctx.font = '12px ui-monospace, Menlo, Consolas, monospace';
+    let c=0;
+    for (let x=startX; x<=B.maxX+1e-6; x+=stepX){
+      if ((c++ % 2)===0){
+        const [sx, sy] = worldToScreen(x, B.maxZ, B);
+        ctx.fillText(x.toFixed(0), sx+4, sy-4);
+      }
+    }
+    c=0;
+    for (let z=startZ; z<=B.maxZ+1e-6; z+=stepZ){
+      if ((c++ % 2)===0){
+        const [sx, sy] = worldToScreen(B.minX, z, B);
+        ctx.fillText(z.toFixed(0), sx+6, sy-4);
+      }
+    }
+
+    ctx.restore();
+  }
+
+  function niceStep(range, target){
+    const rough = range / target;
+    const pow10 = Math.pow(10, Math.floor(Math.log10(rough || 1)));
+    const rem = rough / pow10;
+    let step;
+    if (rem < 1.2) step = 1*pow10;
+    else if (rem < 2.5) step = 2*pow10;
+    else if (rem < 5.5) step = 5*pow10;
+    else step = 10*pow10;
+    return step;
+  }
+
+  function draw(p, radius){
+    const B = bounds(p, radius);
+    drawGrid(B);
+
+    // Draw rays
+    for (const r of rays){
+      const src = worldToScreen(r.ax, r.az, B);
+      const far = worldToScreen(r.ax + r.ux*5000, r.az + r.uz*5000, B);
+      ctx.strokeStyle = 'rgba(139,205,255,0.9)';
+      ctx.lineWidth = 2;
+      ctx.beginPath();
+      ctx.moveTo(src[0], src[1]);
+      ctx.lineTo(far[0], far[1]);
+      ctx.stroke();
+
+      // source point
+      ctx.fillStyle = 'rgba(139,205,255,1)';
+      drawDot(src[0], src[1], 3.2);
+    }
+
+    if (p){
+      const [sx, sy] = worldToScreen(p.x, p.z, B);
+      // uncertainty circle
+      ctx.strokeStyle = 'rgba(109,240,194,0.45)';
+      ctx.lineWidth = 2;
+      ctx.beginPath();
+      const rpx = radius * canvas.width / (B.maxX - B.minX);
+      ctx.arc(sx, sy, rpx, 0, Math.PI*2);
+      ctx.stroke();
+
+      // target crosshair
+      ctx.strokeStyle = 'rgba(255,255,255,0.95)';
+      ctx.lineWidth = 2.5;
+      ctx.beginPath();
+      ctx.moveTo(sx - 8, sy); ctx.lineTo(sx + 8, sy);
+      ctx.moveTo(sx, sy - 8); ctx.lineTo(sx, sy + 8);
+      ctx.stroke();
+
+      ctx.fillStyle = 'rgba(255,255,255,0.95)';
+      drawDot(sx, sy, 2.2);
+    }
+  }
+
+  function drawDot(x,y,r){
+    ctx.beginPath(); ctx.arc(x,y,r,0,Math.PI*2); ctx.fill();
+  }
+
+  // initial render
+  computeAndRender();
+})();
+</script>
+</body>
+</html>
