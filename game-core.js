@@ -337,4 +337,9 @@ function start_new_run() {
   posY = oy + TILE * 0.5;
   dirX = 1.0; dirY = 0.0;
   planeX = 0.0; planeY = 0.66;
+
+  // Ensure theme is (re)started from the beginning on a fresh run
+  if (window.AudioManager && typeof window.AudioManager.startThemeLoop === 'function') {
+    window.AudioManager.startThemeLoop();
+  }
 }

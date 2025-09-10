@@ -3,13 +3,24 @@
 // ---------------- Control selection ----------------
 let selectedControlScheme = null;
 let gameInitialized = false;
+let bootingInProgress = false;
 
 function selectControls(scheme) {
+  if (bootingInProgress) return; // prevent double-trigger
   selectedControlScheme = scheme;
-  
-  // Hide the selection screen
   const selectionScreen = document.getElementById('control-selection');
-  selectionScreen.classList.add('hidden');
+  // Enter boot sequence visual state (keep title visible and centered)
+  selectionScreen.classList.add('booting');
+  bootingInProgress = true;
+  const titleEl = selectionScreen.querySelector('h1');
+  // Promise that resolves when the boot zoom animation ends (fallback 2s)
+  const animationEnded = new Promise((resolve) => {
+    if (!titleEl) { resolve(); return; }
+    let done = false;
+    const handler = () => { if (done) return; done = true; resolve(); };
+    titleEl.addEventListener('animationend', handler, { once: true });
+    setTimeout(handler, 2000);
+  });
   
   // Set up controls based on selection
   if (scheme === 'mobile') {
@@ -18,10 +29,34 @@ function selectControls(scheme) {
     setupDesktopControls();
   }
   
-  // Initialize the game
-  if (!gameInitialized) {
-    init();
-    gameInitialized = true;
+  // Play startup, wait for animation end + 3s hold, then transition and start theme
+  if (window.AudioManager && typeof window.AudioManager.playStartup === 'function') {
+    const startupP = window.AudioManager.playStartup();
+    const holdP = animationEnded.then(() => new Promise(r => setTimeout(r, 3000)));
+    Promise.all([startupP.catch(() => {}), holdP]).finally(() => {
+      selectionScreen.classList.add('hidden');
+      selectionScreen.classList.remove('booting');
+      if (!gameInitialized) {
+        init();
+        gameInitialized = true;
+      }
+      if (window.AudioManager && typeof window.AudioManager.startThemeLoop === 'function') {
+        window.AudioManager.startThemeLoop();
+      }
+      bootingInProgress = false;
+    });
+  } else {
+    // Fallback if AudioManager missing
+    selectionScreen.classList.add('hidden');
+    selectionScreen.classList.remove('booting');
+    if (!gameInitialized) {
+      init();
+      gameInitialized = true;
+    }
+    if (window.AudioManager && typeof window.AudioManager.startThemeLoop === 'function') {
+      window.AudioManager.startThemeLoop();
+    }
+    bootingInProgress = false;
   }
 }
 

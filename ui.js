@@ -34,6 +34,10 @@ function takeDamage() {
       // Still have lives, grant invincibility and show vignette
       invincibilityTime = INVINCIBILITY_DURATION;
       vignetteFade = 1.0; // Full red vignette
+      // Play hurt sound when losing a life but not dying
+      if (window.AudioManager && typeof window.AudioManager.playSfx === 'function') {
+        window.AudioManager.playSfx('hurt', 1.0);
+      }
       if (typeof updateLivesUI === 'function') updateLivesUI();
     }
   }
@@ -89,7 +93,15 @@ let gameOverCountdown = -1.0;
 // Modified game over handling - now only triggers when no lives left
 function triggerGameOver() { 
   if (debugGodMode) return; // Prevent game over in god mode
-  gameOverCountdown = 1.2; 
+  // Stop theme so player death SFX is clearly heard
+  if (window.AudioManager && typeof window.AudioManager.stopTheme === 'function') {
+    window.AudioManager.stopTheme();
+  }
+  // Play player death sound
+  if (window.AudioManager && typeof window.AudioManager.playSfx === 'function') {
+    window.AudioManager.playSfx('playerdeath', 1.0);
+  }
+  gameOverCountdown = 3.2; // extended by ~2 seconds
 }
 
 function drawGameOverScreen(dt) {
