@@ -301,6 +301,14 @@ function killEnemy(e) {
   e.state = 'dying';
   e.deathStartTime = performance.now() / 1000;
   e.deathProgress = 0;
+  // Play appropriate death SFX
+  if (window.AudioManager && typeof window.AudioManager.playSfx === 'function') {
+    if (e.type === 'ranged') {
+      window.AudioManager.playSfx('rangedenemydeath', 0.9);
+    } else {
+      window.AudioManager.playSfx('enemydeath', 0.9);
+    }
+  }
   
   // Award credits based on enemy type and difficulty
   let creditValue;

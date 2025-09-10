@@ -73,6 +73,10 @@ function spawnShot() {
   const effectiveSpeed = SHOT_SPEED * speedMultiplier;
   
   shots.push({ x: sx, y: sy, vx: dirX * effectiveSpeed, vy: dirY * effectiveSpeed, t: 0 });
+  // Play blaster SFX
+  if (window.AudioManager && typeof window.AudioManager.playSfx === 'function') {
+    window.AudioManager.playSfx('blast', 0.7);
+  }
   
   // Start cooldown (apply upgrade multiplier)
   const cooldownMultiplier = window.BLASTER_COOLDOWN_MULTIPLIER || 1.0;

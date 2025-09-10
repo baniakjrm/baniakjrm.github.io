@@ -12,7 +12,7 @@ const UPGRADES = {
     costMultiplier: 1.5,
     effect: (level) => 1.0 - (level * 0.15) // 1.0 -> 0.25 (scales from slower 1.4s base)
   },  projectileSpeed: {
-    name: 'Rapid Fire',
+    name: 'Projectile Speed',
     description: 'Increases projectile speed',
     maxLevel: 3,
     baseCost: 450,
