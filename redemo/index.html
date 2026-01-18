@@ -310,6 +310,7 @@
         new THREE.MeshBasicMaterial({ color: 0xff3333 })
       );
       originMarker.position.set(0, 0.06, 0);
+      originMarker.visible = false;
       player.add(originMarker);
 
       window.addEventListener("keydown", (event) => {
@@ -318,6 +319,9 @@
           keys[key] = true;
           if (key === "e" && !event.repeat) {
             ePressed = true;
+          }
+          if (key === "k" && !event.repeat) {
+            originMarker.visible = !originMarker.visible;
           }
           event.preventDefault();
         }
@@ -332,23 +336,64 @@
       });
 
       const loader = new GLTFLoader();
-      const modelMaterial = new THREE.MeshStandardMaterial({ color: 0x2ecc71 });
+      const idleMaterial = new THREE.MeshStandardMaterial({ color: 0x2ecc71 });
+      const walkMaterial = new THREE.MeshStandardMaterial({
+        color: 0x2ecc71,
+        skinning: true,
+      });
+      let idleModel = null;
+      let walkModel = null;
+      let walkMixer = null;
+      let walkAction = null;
+
+      function setupPlayerModel(scene, material, rotationY = 0, yOffset = 0) {
+        scene.traverse((child) => {
+          if (child.isMesh) {
+            child.material = material;
+          }
+        });
+        scene.scale.setScalar(1 / 3);
+        if (rotationY !== 0) {
+          scene.rotation.y = rotationY;
+        }
+        const bounds = new THREE.Box3().setFromObject(scene);
+        scene.position.y += -bounds.min.y + yOffset;
+      }
+
       loader.load(
         "./ChrosGreenfield.glb",
         (gltf) => {
-          gltf.scene.traverse((child) => {
-            if (child.isMesh) {
-              child.material = modelMaterial;
-            }
-          });
-          gltf.scene.scale.setScalar(1 / 3);
-          const bounds = new THREE.Box3().setFromObject(gltf.scene);
-          gltf.scene.position.y += -bounds.min.y;
-          player.add(gltf.scene);
+          setupPlayerModel(gltf.scene, idleMaterial);
+          idleModel = gltf.scene;
+          player.add(idleModel);
         },
         undefined,
         (error) => {
           console.error("Failed to load ChrosGreenfield.glb:", error);
+        }
+      );
+
+      loader.load(
+        "./Walkingchros.glb",
+        (gltf) => {
+          setupPlayerModel(gltf.scene, walkMaterial, Math.PI, -0.32);
+          walkModel = gltf.scene;
+          walkModel.visible = false;
+          player.add(walkModel);
+          if (gltf.animations && gltf.animations.length > 0) {
+            walkMixer = new THREE.AnimationMixer(walkModel);
+            const clip =
+              THREE.AnimationClip.findByName(gltf.animations, "Walk") ||
+              gltf.animations[0];
+            walkAction = walkMixer.clipAction(clip);
+            walkAction.loop = THREE.LoopRepeat;
+            walkAction.play();
+            walkAction.timeScale = 0;
+          }
+        },
+        undefined,
+        (error) => {
+          console.error("Failed to load Walkingchros.glb:", error);
         }
       );
 
@@ -683,6 +728,22 @@
         }
       }
 
+      function updateWalkAnimation(delta) {
+        const walkingNow = keys.w && !keys.s && !gameComplete;
+        const useWalkModel = walkingNow && Boolean(walkModel);
+        if (walkModel) {
+          walkModel.visible = useWalkModel;
+        }
+        if (idleModel) {
+          idleModel.visible = !useWalkModel;
+        }
+        if (!walkMixer || !walkAction) {
+          return;
+        }
+        walkAction.timeScale = useWalkModel ? 1 : 0;
+        walkMixer.update(delta);
+      }
+
       function updateDebugHud() {
         const p = player.position;
         const c = camera.position;
@@ -718,6 +779,7 @@
           updateCameraByQuadrant();
           updateCamera(delta);
         }
+        updateWalkAnimation(delta);
         updateDoorInteraction();
         updatePickupMessage(delta);
         updateDoorLockedMessage(delta);
