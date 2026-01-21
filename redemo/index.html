@@ -3,7 +3,7 @@
   <head>
     <meta charset="utf-8" />
     <meta name="viewport" content="width=device-width, initial-scale=1" />
-    <title>Fixed Camera Base</title>
+    <title>President Weevil</title>
     <script type="importmap">
       {
         "imports": {
@@ -88,12 +88,28 @@
         pointer-events: none;
         z-index: 20;
       }
+      #death-flash {
+        position: fixed;
+        inset: 0;
+        background: #3b0000;
+        opacity: 0;
+        pointer-events: none;
+        z-index: 22;
+      }
       #end-message {
+        position: fixed;
+        inset: 0;
+        background: url("cat.png") center center / 100% 100% no-repeat;
+        opacity: 0;
+        pointer-events: none;
+        z-index: 21;
+      }
+      #death-message {
         position: fixed;
         top: 50%;
         left: 50%;
         transform: translate(-50%, -50%);
-        color: #3dff74;
+        color: #ff3b3b;
         font: 66px/1.2 ui-monospace, "SFMono-Regular", Menlo, Consolas,
           "Liberation Mono", monospace;
         text-transform: uppercase;
@@ -110,7 +126,12 @@
     <div id="door-prompt">(E)</div>
     <div id="debug">Loading...</div>
     <div id="fade-overlay"></div>
-    <div id="end-message">Proof of concept complete</div>
+    <div id="death-flash"></div>
+    <div id="end-message"></div>
+    <div id="death-message">You died</div>
+    <audio id="meow-audio" src="./audio/meow.ogg" preload="auto"></audio>
+    <audio id="gameover-audio" src="./audio/gameover.ogg" preload="auto"></audio>
+    <audio id="bg-audio" src="./audio/background.ogg" preload="auto" loop></audio>
     <script type="module">
       import * as THREE from "three";
       import { GLTFLoader } from "three/addons/loaders/GLTFLoader.js";
@@ -168,6 +189,23 @@
             fov: 59.7,
           },
         },
+        {
+          key: "zone-2",
+          minX: 4.5,
+          maxX: 10.0,
+          minZ: 4.5,
+          maxZ: 10.0,
+          preset: {
+            position: new THREE.Vector3(9.06, 6.86, 9.38),
+            rotation: new THREE.Euler(
+              THREE.MathUtils.degToRad(-69.9),
+              THREE.MathUtils.degToRad(42.8),
+              0,
+              "YXZ"
+            ),
+            fov: 59.7,
+          },
+        },
       ];
       let cameraYaw = 0;
       let cameraPitch = 0;
@@ -192,7 +230,28 @@
       const doorPrompt = document.getElementById("door-prompt");
       const doorLocked = document.getElementById("door-locked");
       const fadeOverlay = document.getElementById("fade-overlay");
+      const deathFlash = document.getElementById("death-flash");
       const endMessage = document.getElementById("end-message");
+      const deathMessage = document.getElementById("death-message");
+      const meowAudio = document.getElementById("meow-audio");
+      const gameOverAudio = document.getElementById("gameover-audio");
+      const bgAudio = document.getElementById("bg-audio");
+      let bgAudioStarted = false;
+      debugHud.style.display = "none";
+
+      function startBackgroundAudio() {
+        if (!bgAudio || bgAudioStarted) {
+          return;
+        }
+        bgAudio
+          .play()
+          .then(() => {
+            bgAudioStarted = true;
+          })
+          .catch(() => {});
+      }
+
+      startBackgroundAudio();
 
       const floorSize = 20;
       const halfSize = floorSize / 2;
@@ -260,6 +319,7 @@
       scene.add(dirLight);
 
       const clock = new THREE.Clock();
+      const gameStartTime = performance.now();
       const keys = {
         w: false,
         a: false,
@@ -274,20 +334,54 @@
         l: false,
       };
       const moveSpeed = 3;
+      const zombieSpeed = moveSpeed * 0.55;
+      const zombieSpeedRampStart = 5;
+      const zombieSpeedRampRate = 0.03;
       const turnSpeed = THREE.MathUtils.degToRad(120);
       const moveDirection = new THREE.Vector3();
       const moveStep = new THREE.Vector3();
       const cameraForward = new THREE.Vector3();
       const cameraRight = new THREE.Vector3();
       const forwardVector = new THREE.Vector3(0, 0, -1);
+      const zombieDirection = new THREE.Vector3();
+      const zombieToTable = new THREE.Vector3();
+      const zombieTangent = new THREE.Vector3();
+      const zombieTangentAlt = new THREE.Vector3();
+      const zombieCandidate = new THREE.Vector3();
+      const zombieCandidateAlt = new THREE.Vector3();
+      const zombieFacingOffset = 0;
+      const zombieTurnSpeed = THREE.MathUtils.degToRad(180);
+      const playerHitboxRadius = 0.5;
+      const playerHitboxLength = 1;
+      const playerHitboxYOffset = playerHitboxRadius + playerHitboxLength / 2;
+      const zombieHitboxRadius = 0.5;
+      const zombieHitboxLength = 1;
+      const zombieHitboxYOffset = zombieHitboxRadius + zombieHitboxLength / 2;
+      const zombieHurtboxRadius = zombieHitboxRadius * 2;
+      const zombieHurtboxLength = zombieHitboxLength * 2;
+      const zombieHurtboxYOffset = zombieHurtboxRadius + zombieHurtboxLength / 2;
+      const axisLength = 5;
+      const axisThickness = 0.06;
+      const facingRodLength = 1;
       const cameraMoveSpeed = 6;
       const cameraRotateSpeed = THREE.MathUtils.degToRad(60);
       const cameraFovSpeed = 30;
       let currentCameraKey = null;
       let ePressed = false;
       let gameComplete = false;
+      let playerDead = false;
+      let debugMode = false;
+      let debugAxisMode = false;
+      let zombieAvoidingTable = false;
+      let zombieAvoidDirection = 0;
+      let zombieStuckFrames = 0;
+      let zombieFacingYaw = 0;
+      let zombieFacingInitialized = false;
       const fadeSpeed = 0.9;
       let fadeAlpha = 0;
+      let deathFadeAlpha = 0;
+      const deathFlashHoldDuration = 0.3;
+      let deathFlashHoldTimer = 0;
       const player = new THREE.Group();
       player.position.set(-8.47, 0, 5.35);
       player.rotation.y = THREE.MathUtils.degToRad(271.7);
@@ -303,7 +397,20 @@
       let doorLockedTimer = 0;
       const doorPosition = new THREE.Vector3(-4.17, 0, 9.7);
       const doorPromptRadius = 2;
+      const tablePosition = new THREE.Vector3(5, 0, 5);
+      const tableHitboxMin = new THREE.Vector3(3.97, 0, 2.37);
+      const tableHitboxMax = new THREE.Vector3(6.02, 0, 7.62);
+      const tableHitboxHeight = 1;
+      const tableHitboxCenter = new THREE.Vector3(
+        (tableHitboxMin.x + tableHitboxMax.x) / 2,
+        0,
+        (tableHitboxMin.z + tableHitboxMax.z) / 2
+      );
       let doorObject = null;
+      let tableModel = null;
+      let tableHitbox = null;
+      let playerHitbox = null;
+      let zombieTargetMarker = null;
 
       const originMarker = new THREE.Mesh(
         new THREE.BoxGeometry(0.12, 0.12, 0.12),
@@ -313,15 +420,142 @@
       originMarker.visible = false;
       player.add(originMarker);
 
+      const axisMarker = new THREE.Group();
+      axisMarker.visible = false;
+      const axisX = new THREE.Mesh(
+        new THREE.BoxGeometry(axisLength, axisThickness, axisThickness),
+        new THREE.MeshBasicMaterial({ color: 0xff3333 })
+      );
+      axisX.position.x = axisLength / 2;
+      axisMarker.add(axisX);
+      const axisY = new THREE.Mesh(
+        new THREE.BoxGeometry(axisThickness, axisLength, axisThickness),
+        new THREE.MeshBasicMaterial({ color: 0x2ecc71 })
+      );
+      axisY.position.y = axisLength / 2;
+      axisMarker.add(axisY);
+      const axisZ = new THREE.Mesh(
+        new THREE.BoxGeometry(axisThickness, axisThickness, axisLength),
+        new THREE.MeshBasicMaterial({ color: 0x3b82f6 })
+      );
+      axisZ.position.z = axisLength / 2;
+      axisMarker.add(axisZ);
+      const facingRod = new THREE.Mesh(
+        new THREE.BoxGeometry(axisThickness, axisThickness, facingRodLength),
+        new THREE.MeshBasicMaterial({ color: 0xffffff })
+      );
+      facingRod.position.z = -facingRodLength / 2;
+      axisMarker.add(facingRod);
+      axisMarker.position.copy(player.position);
+      scene.add(axisMarker);
+
+      const playerHitboxGeometry = new THREE.CapsuleGeometry(
+        playerHitboxRadius,
+        playerHitboxLength,
+        4,
+        12
+      );
+      const playerHitboxMaterial = new THREE.MeshBasicMaterial({
+        color: 0x2ecc71,
+        wireframe: true,
+        transparent: true,
+        opacity: 0.6,
+      });
+      playerHitbox = new THREE.Mesh(playerHitboxGeometry, playerHitboxMaterial);
+      playerHitbox.visible = debugMode;
+      playerHitbox.position.set(
+        player.position.x,
+        player.position.y + playerHitboxYOffset,
+        player.position.z
+      );
+      scene.add(playerHitbox);
+
+      const zombieTargetMaterial = new THREE.MeshBasicMaterial({
+        color: 0xff5bc5,
+        wireframe: true,
+        transparent: true,
+        opacity: 0.7,
+      });
+      zombieTargetMarker = new THREE.Mesh(
+        new THREE.CapsuleGeometry(
+          zombieHitboxRadius,
+          zombieHitboxLength,
+          4,
+          12
+        ),
+        zombieTargetMaterial
+      );
+      zombieTargetMarker.visible = debugMode;
+      zombieTargetMarker.position.set(
+        player.position.x,
+        player.position.y + playerHitboxYOffset,
+        player.position.z
+      );
+      scene.add(zombieTargetMarker);
+
+      const tableHitboxSize = new THREE.Vector3(
+        Math.abs(tableHitboxMax.x - tableHitboxMin.x),
+        tableHitboxHeight,
+        Math.abs(tableHitboxMax.z - tableHitboxMin.z)
+      );
+      const tableHitboxPosition = new THREE.Vector3(
+        tableHitboxCenter.x,
+        tableHitboxHeight / 2,
+        tableHitboxCenter.z
+      );
+      const tableHitboxMaterial = new THREE.MeshBasicMaterial({
+        color: 0xc8a26a,
+        wireframe: true,
+        transparent: true,
+        opacity: 0.6,
+      });
+      tableHitbox = new THREE.Mesh(
+        new THREE.BoxGeometry(
+          tableHitboxSize.x,
+          tableHitboxSize.y,
+          tableHitboxSize.z
+        ),
+        tableHitboxMaterial
+      );
+      tableHitbox.visible = debugMode;
+      tableHitbox.position.copy(tableHitboxPosition);
+      scene.add(tableHitbox);
+
       window.addEventListener("keydown", (event) => {
         const key = event.key.toLowerCase();
         if (key in keys) {
+          startBackgroundAudio();
           keys[key] = true;
           if (key === "e" && !event.repeat) {
             ePressed = true;
           }
           if (key === "k" && !event.repeat) {
-            originMarker.visible = !originMarker.visible;
+            debugMode = !debugMode;
+            originMarker.visible = debugMode;
+            if (playerHitbox) {
+              playerHitbox.visible = debugMode;
+            }
+            if (zombieHitbox) {
+              zombieHitbox.visible = debugMode;
+            }
+            if (zombieHurtbox) {
+              zombieHurtbox.visible = debugMode;
+            }
+            if (tableHitbox) {
+              tableHitbox.visible = debugMode;
+            }
+            if (zombieTargetMarker) {
+              zombieTargetMarker.visible = debugMode;
+            }
+            debugHud.style.display = debugMode ? "block" : "none";
+            if (!debugMode) {
+              setDebugAxisMode(false);
+              debugHud.textContent = "";
+            }
+          }
+          if (key === "l" && !event.repeat && debugMode) {
+            killZombies();
+            setDebugAxisMode(!debugAxisMode);
           }
           event.preventDefault();
         }
@@ -341,10 +575,25 @@
         color: 0x2ecc71,
         skinning: true,
       });
+      const zombieMaterial = new THREE.MeshStandardMaterial({
+        color: 0xff3b3b,
+        skinning: true,
+      });
+      const tableMaterial = new THREE.MeshStandardMaterial({ color: 0xc8a26a });
       let idleModel = null;
+      let idleMixer = null;
+      let idleAction = null;
       let walkModel = null;
       let walkMixer = null;
       let walkAction = null;
+      let walkBackModel = null;
+      let walkBackMixer = null;
+      let walkBackAction = null;
+      let zombieModel = null;
+      let zombieMixer = null;
+      let zombieAction = null;
+      let zombieHitbox = null;
+      let zombieHurtbox = null;
 
       function setupPlayerModel(scene, material, rotationY = 0, yOffset = 0) {
         scene.traverse((child) => {
@@ -361,22 +610,31 @@
       }
 
       loader.load(
-        "./ChrosGreenfield.glb",
+        "./ModelsandAnimations/Chrosidle.glb",
         (gltf) => {
-          setupPlayerModel(gltf.scene, idleMaterial);
+          setupPlayerModel(gltf.scene, idleMaterial, Math.PI, -0.17);
           idleModel = gltf.scene;
           player.add(idleModel);
+          if (gltf.animations && gltf.animations.length > 0) {
+            idleMixer = new THREE.AnimationMixer(idleModel);
+            const clip =
+              THREE.AnimationClip.findByName(gltf.animations, "Idle") ||
+              gltf.animations[0];
+            idleAction = idleMixer.clipAction(clip);
+            idleAction.loop = THREE.LoopRepeat;
+            idleAction.play();
+          }
         },
         undefined,
         (error) => {
-          console.error("Failed to load ChrosGreenfield.glb:", error);
+          console.error("Failed to load ModelsandAnimations/Chrosidle.glb:", error);
         }
       );
 
       loader.load(
-        "./Walkingchros.glb",
+        "./ModelsandAnimations/Walkingchros.glb",
         (gltf) => {
-          setupPlayerModel(gltf.scene, walkMaterial, Math.PI, -0.32);
+          setupPlayerModel(gltf.scene, walkMaterial, Math.PI, -0.17);
           walkModel = gltf.scene;
           walkModel.visible = false;
           player.add(walkModel);
@@ -393,13 +651,123 @@
         },
         undefined,
         (error) => {
-          console.error("Failed to load Walkingchros.glb:", error);
+          console.error(
+            "Failed to load ModelsandAnimations/Walkingchros.glb:",
+            error
+          );
+        }
+      );
+
+      loader.load(
+        "./ModelsandAnimations/Walkingchrosbackwards.glb",
+        (gltf) => {
+          setupPlayerModel(gltf.scene, walkMaterial, Math.PI, -0.17);
+          walkBackModel = gltf.scene;
+          walkBackModel.visible = false;
+          player.add(walkBackModel);
+          if (gltf.animations && gltf.animations.length > 0) {
+            walkBackMixer = new THREE.AnimationMixer(walkBackModel);
+            const clip =
+              THREE.AnimationClip.findByName(gltf.animations, "Walk") ||
+              gltf.animations[0];
+            walkBackAction = walkBackMixer.clipAction(clip);
+            walkBackAction.loop = THREE.LoopRepeat;
+            walkBackAction.play();
+            walkBackAction.timeScale = 0;
+          }
+        },
+        undefined,
+        (error) => {
+          console.error(
+            "Failed to load ModelsandAnimations/Walkingchrosbackwards.glb:",
+            error
+          );
+        }
+      );
+
+      loader.load(
+        "./ModelsandAnimations/Zombiewalk.glb",
+        (gltf) => {
+          setupPlayerModel(gltf.scene, zombieMaterial, Math.PI, -0.32);
+          zombieModel = gltf.scene;
+          zombieFacingYaw = zombieModel.rotation.y;
+          zombieFacingInitialized = true;
+          zombieModel.position.set(
+            keyPosition.x,
+            zombieModel.position.y,
+            keyPosition.z
+          );
+          if (zombieTargetMarker) {
+            zombieTargetMarker.position.set(
+              zombieModel.position.x,
+              zombieModel.position.y + zombieHitboxYOffset,
+              zombieModel.position.z
+            );
+          }
+          scene.add(zombieModel);
+          const hitboxGeometry = new THREE.CapsuleGeometry(
+            zombieHitboxRadius,
+            zombieHitboxLength,
+            4,
+            12
+          );
+          const hitboxMaterial = new THREE.MeshBasicMaterial({
+            color: 0xffffff,
+            wireframe: true,
+            transparent: true,
+            opacity: 0.6,
+          });
+          zombieHitbox = new THREE.Mesh(hitboxGeometry, hitboxMaterial);
+          zombieHitbox.visible = debugMode;
+          zombieHitbox.position.set(
+            zombieModel.position.x,
+            zombieModel.position.y + zombieHitboxYOffset,
+            zombieModel.position.z
+          );
+          scene.add(zombieHitbox);
+          const hurtboxGeometry = new THREE.CapsuleGeometry(
+            zombieHurtboxRadius,
+            zombieHurtboxLength,
+            4,
+            12
+          );
+          const hurtboxMaterial = new THREE.MeshBasicMaterial({
+            color: 0xff3b3b,
+            wireframe: true,
+            transparent: true,
+            opacity: 0.6,
+          });
+          zombieHurtbox = new THREE.Mesh(hurtboxGeometry, hurtboxMaterial);
+          zombieHurtbox.visible = debugMode;
+          zombieHurtbox.position.set(
+            zombieModel.position.x,
+            zombieModel.position.y + zombieHurtboxYOffset,
+            zombieModel.position.z
+          );
+          scene.add(zombieHurtbox);
+          if (gltf.animations && gltf.animations.length > 0) {
+            zombieMixer = new THREE.AnimationMixer(zombieModel);
+            const clip =
+              THREE.AnimationClip.findByName(gltf.animations, "Walk") ||
+              gltf.animations[0];
+            zombieAction = zombieMixer.clipAction(clip);
+            zombieAction.loop = THREE.LoopRepeat;
+            zombieAction.play();
+            zombieAction.timeScale = 1.716;
+          }
+        },
+        undefined,
+        (error) => {
+          console.error(
+            "Failed to load ModelsandAnimations/Zombiewalk.glb:",
+            error
+          );
         }
       );
 
       const keyMaterial = new THREE.MeshStandardMaterial({ color: 0xffd84a });
       loader.load(
-        "./Key.glb",
+        "./ModelsandAnimations/Key.glb",
         (gltf) => {
           gltf.scene.traverse((child) => {
             if (child.isMesh) {
@@ -415,13 +783,13 @@
         },
         undefined,
         (error) => {
-          console.error("Failed to load Key.glb:", error);
+          console.error("Failed to load ModelsandAnimations/Key.glb:", error);
         }
       );
 
       const doorMaterial = new THREE.MeshStandardMaterial({ color: 0x6b4a2b });
       loader.load(
-        "./Door.glb",
+        "./ModelsandAnimations/Door.glb",
         (gltf) => {
           gltf.scene.traverse((child) => {
             if (child.isMesh) {
@@ -437,7 +805,31 @@
         },
         undefined,
         (error) => {
-          console.error("Failed to load Door.glb:", error);
+          console.error("Failed to load ModelsandAnimations/Door.glb:", error);
+        }
+      );
+
+      loader.load(
+        "./ModelsandAnimations/table.glb",
+        (gltf) => {
+          gltf.scene.traverse((child) => {
+            if (child.isMesh) {
+              child.material = tableMaterial;
+            }
+          });
+          tableModel = gltf.scene;
+          tableModel.scale.setScalar(1 / 3);
+          const bounds = new THREE.Box3().setFromObject(tableModel);
+          tableModel.position.set(
+            tablePosition.x,
+            tablePosition.y - bounds.min.y,
+            tablePosition.z
+          );
+          scene.add(tableModel);
+        },
+        undefined,
+        (error) => {
+          console.error("Failed to load ModelsandAnimations/table.glb:", error);
         }
       );
 
@@ -461,6 +853,385 @@
         }
         return inside;
       }
+
+      function isInsideHallwayWithRadius(x, z, radius) {
+        if (!isInsideHallway(x, z)) {
+          return false;
+        }
+        const samples = 8;
+        for (let i = 0; i < samples; i += 1) {
+          const angle = (Math.PI * 2 * i) / samples;
+          const sampleX = x + Math.cos(angle) * radius;
+          const sampleZ = z + Math.sin(angle) * radius;
+          if (!isInsideHallway(sampleX, sampleZ)) {
+            return false;
+          }
+        }
+        return true;
+      }
+
+      function isCollidingWithTable(x, z, radius) {
+        const clampedX = Math.max(
+          tableHitboxMin.x,
+          Math.min(x, tableHitboxMax.x)
+        );
+        const clampedZ = Math.max(
+          tableHitboxMin.z,
+          Math.min(z, tableHitboxMax.z)
+        );
+        const dx = x - clampedX;
+        const dz = z - clampedZ;
+        return dx * dx + dz * dz <= radius * radius;
+      }
+
+      function isPositionAllowed(x, z, radius) {
+        return (
+          isInsideHallwayWithRadius(x, z, radius) &&
+          !isCollidingWithTable(x, z, radius)
+        );
+      }
+
+      function logZombieEvent(flag, details) {
+        if (!debugMode) {
+          return;
+        }
+        console.info(`[ZOMBIE_EVENT] ${flag}`, details);
+      }
+
+      function segmentIntersectsAabbXZ(ax, az, bx, bz, minX, minZ, maxX, maxZ) {
+        let tMin = 0;
+        let tMax = 1;
+        const dx = bx - ax;
+        const dz = bz - az;
+        if (Math.abs(dx) < 0.00000001) {
+          if (ax < minX || ax > maxX) {
+            return false;
+          }
+        } else {
+          const invDx = 1 / dx;
+          let t1 = (minX - ax) * invDx;
+          let t2 = (maxX - ax) * invDx;
+          if (t1 > t2) {
+            const swap = t1;
+            t1 = t2;
+            t2 = swap;
+          }
+          tMin = Math.max(tMin, t1);
+          tMax = Math.min(tMax, t2);
+          if (tMin > tMax) {
+            return false;
+          }
+        }
+        if (Math.abs(dz) < 0.00000001) {
+          if (az < minZ || az > maxZ) {
+            return false;
+          }
+        } else {
+          const invDz = 1 / dz;
+          let t1 = (minZ - az) * invDz;
+          let t2 = (maxZ - az) * invDz;
+          if (t1 > t2) {
+            const swap = t1;
+            t1 = t2;
+            t2 = swap;
+          }
+          tMin = Math.max(tMin, t1);
+          tMax = Math.min(tMax, t2);
+          if (tMin > tMax) {
+            return false;
+          }
+        }
+        return true;
+      }
+
+      function isTableBlockingPath(ax, az, bx, bz, radius) {
+        const minX = tableHitboxMin.x - radius;
+        const maxX = tableHitboxMax.x + radius;
+        const minZ = tableHitboxMin.z - radius;
+        const maxZ = tableHitboxMax.z + radius;
+        return segmentIntersectsAabbXZ(ax, az, bx, bz, minX, minZ, maxX, maxZ);
+      }
+
+      function setZombieTarget(x, z) {
+        if (!zombieTargetMarker || !zombieModel) {
+          return;
+        }
+        zombieTargetMarker.position.set(
+          x,
+          zombieModel.position.y + zombieHitboxYOffset,
+          z
+        );
+      }
+
+      function getTableNormal(x, z, radius, out) {
+        const minX = tableHitboxMin.x - radius;
+        const maxX = tableHitboxMax.x + radius;
+        const minZ = tableHitboxMin.z - radius;
+        const maxZ = tableHitboxMax.z + radius;
+        const clampedX = Math.max(minX, Math.min(x, maxX));
+        const clampedZ = Math.max(minZ, Math.min(z, maxZ));
+        out.set(x - clampedX, 0, z - clampedZ);
+        if (out.lengthSq() < 0.0001) {
+          const distLeft = Math.abs(x - minX);
+          const distRight = Math.abs(maxX - x);
+          const distBottom = Math.abs(z - minZ);
+          const distTop = Math.abs(maxZ - z);
+          const minDist = Math.min(distLeft, distRight, distBottom, distTop);
+          if (minDist === distLeft) {
+            out.set(-1, 0, 0);
+          } else if (minDist === distRight) {
+            out.set(1, 0, 0);
+          } else if (minDist === distBottom) {
+            out.set(0, 0, -1);
+          } else {
+            out.set(0, 0, 1);
+          }
+        }
+        return out.normalize();
+      }
+
+      function distanceSquaredXZ(ax, az, bx, bz) {
+        const dx = ax - bx;
+        const dz = az - bz;
+        return dx * dx + dz * dz;
+      }
+
+      function normalizeAngle(angle) {
+        let normalized = angle;
+        while (normalized > Math.PI) {
+          normalized -= Math.PI * 2;
+        }
+        while (normalized < -Math.PI) {
+          normalized += Math.PI * 2;
+        }
+        return normalized;
+      }
+
+      function updateZombieFacing(dx, dz, delta) {
+        if (Math.abs(dx) < 0.00001 && Math.abs(dz) < 0.00001) {
+          return;
+        }
+        const targetYaw = Math.atan2(dx, dz) + zombieFacingOffset;
+        if (!zombieFacingInitialized) {
+          zombieFacingYaw = targetYaw;
+          zombieFacingInitialized = true;
+        } else {
+          const diff = normalizeAngle(targetYaw - zombieFacingYaw);
+          const maxStep = zombieTurnSpeed * delta;
+          zombieFacingYaw += Math.sign(diff) * Math.min(Math.abs(diff), maxStep);
+        }
+        zombieModel.rotation.y = zombieFacingYaw;
+      }
+
+      function selectZombieAvoidDirection(step) {
+        getTableNormal(
+          zombieModel.position.x,
+          zombieModel.position.z,
+          zombieHitboxRadius,
+          zombieToTable
+        );
+        zombieTangent.set(-zombieToTable.z, 0, zombieToTable.x).normalize();
+        zombieTangentAlt.set(zombieToTable.z, 0, -zombieToTable.x).normalize();
+        zombieCandidate
+          .copy(zombieModel.position)
+          .addScaledVector(zombieTangent, step);
+        zombieCandidateAlt
+          .copy(zombieModel.position)
+          .addScaledVector(zombieTangentAlt, step);
+        const canFirst = isPositionAllowed(
+          zombieCandidate.x,
+          zombieCandidate.z,
+          zombieHitboxRadius
+        );
+        const canSecond = isPositionAllowed(
+          zombieCandidateAlt.x,
+          zombieCandidateAlt.z,
+          zombieHitboxRadius
+        );
+        if (!canFirst && !canSecond) {
+          return false;
+        }
+        const distFirst = canFirst
+          ? distanceSquaredXZ(
+              zombieCandidate.x,
+              zombieCandidate.z,
+              player.position.x,
+              player.position.z
+            )
+          : Number.POSITIVE_INFINITY;
+        const distSecond = canSecond
+          ? distanceSquaredXZ(
+              zombieCandidateAlt.x,
+              zombieCandidateAlt.z,
+              player.position.x,
+              player.position.z
+            )
+          : Number.POSITIVE_INFINITY;
+        const useFirst = distFirst <= distSecond;
+        zombieAvoidDirection = useFirst ? 1 : -1;
+        return true;
+      }
+
+      function moveZombieAlongTable(step, delta) {
+        if (zombieAvoidDirection === 0 && !selectZombieAvoidDirection(step)) {
+          return false;
+        }
+        getTableNormal(
+          zombieModel.position.x,
+          zombieModel.position.z,
+          zombieHitboxRadius,
+          zombieToTable
+        );
+        zombieTangent.set(-zombieToTable.z, 0, zombieToTable.x).normalize();
+        zombieTangentAlt.set(zombieToTable.z, 0, -zombieToTable.x).normalize();
+        const primaryDirection = zombieAvoidDirection > 0
+          ? zombieTangent
+          : zombieTangentAlt;
+        const secondaryDirection = zombieAvoidDirection > 0
+          ? zombieTangentAlt
+          : zombieTangent;
+        zombieCandidate
+          .copy(zombieModel.position)
+          .addScaledVector(primaryDirection, step);
+        if (
+          isPositionAllowed(
+            zombieCandidate.x,
+            zombieCandidate.z,
+            zombieHitboxRadius
+          )
+        ) {
+          const moveX = primaryDirection.x * step;
+          const moveZ = primaryDirection.z * step;
+          setZombieTarget(zombieCandidate.x, zombieCandidate.z);
+          zombieModel.position.set(
+            zombieCandidate.x,
+          zombieModel.position.y,
+          zombieCandidate.z
+        );
+        updateZombieFacing(moveX, moveZ, delta);
+        return true;
+      }
+      zombieCandidateAlt
+        .copy(zombieModel.position)
+        .addScaledVector(secondaryDirection, step);
+      if (
+        isPositionAllowed(
+          zombieCandidateAlt.x,
+          zombieCandidateAlt.z,
+          zombieHitboxRadius
+        )
+      ) {
+        zombieAvoidDirection *= -1;
+        logZombieEvent("table-avoid-flip", {
+          position: {
+            x: zombieModel.position.x.toFixed(2),
+            z: zombieModel.position.z.toFixed(2),
+          },
+        });
+        setZombieTarget(zombieCandidateAlt.x, zombieCandidateAlt.z);
+        zombieModel.position.set(
+          zombieCandidateAlt.x,
+          zombieModel.position.y,
+          zombieCandidateAlt.z
+        );
+        updateZombieFacing(
+          secondaryDirection.x * step,
+          secondaryDirection.z * step,
+          delta
+        );
+        return true;
+      }
+      const pushStrength = 0.35;
+      const pushStep = step * pushStrength;
+      const pushX = zombieToTable.x * pushStep;
+      const pushZ = zombieToTable.z * pushStep;
+      zombieCandidate
+        .copy(zombieModel.position)
+        .addScaledVector(primaryDirection, step)
+        .addScaledVector(zombieToTable, pushStep);
+      if (
+        isPositionAllowed(
+          zombieCandidate.x,
+          zombieCandidate.z,
+          zombieHitboxRadius
+        )
+      ) {
+        setZombieTarget(zombieCandidate.x, zombieCandidate.z);
+        zombieModel.position.set(
+          zombieCandidate.x,
+          zombieModel.position.y,
+          zombieCandidate.z
+        );
+        updateZombieFacing(
+          primaryDirection.x * step + pushX,
+          primaryDirection.z * step + pushZ,
+          delta
+        );
+        return true;
+      }
+      zombieCandidateAlt
+        .copy(zombieModel.position)
+        .addScaledVector(secondaryDirection, step)
+        .addScaledVector(zombieToTable, pushStep);
+      if (
+        isPositionAllowed(
+          zombieCandidateAlt.x,
+          zombieCandidateAlt.z,
+          zombieHitboxRadius
+        )
+      ) {
+        zombieAvoidDirection *= -1;
+        logZombieEvent("table-avoid-flip", {
+          position: {
+            x: zombieModel.position.x.toFixed(2),
+            z: zombieModel.position.z.toFixed(2),
+          },
+        });
+        setZombieTarget(zombieCandidateAlt.x, zombieCandidateAlt.z);
+        zombieModel.position.set(
+          zombieCandidateAlt.x,
+          zombieModel.position.y,
+          zombieCandidateAlt.z
+        );
+        updateZombieFacing(
+          secondaryDirection.x * step + pushX,
+          secondaryDirection.z * step + pushZ,
+          delta
+        );
+        return true;
+      }
+      const pushOnlyStep = step * 0.6;
+      zombieCandidate
+        .copy(zombieModel.position)
+        .addScaledVector(zombieToTable, pushOnlyStep);
+      if (
+        isPositionAllowed(
+          zombieCandidate.x,
+          zombieCandidate.z,
+          zombieHitboxRadius
+        )
+      ) {
+        logZombieEvent("table-avoid-push", {
+          position: {
+            x: zombieModel.position.x.toFixed(2),
+            z: zombieModel.position.z.toFixed(2),
+          },
+        });
+        setZombieTarget(zombieCandidate.x, zombieCandidate.z);
+        zombieModel.position.set(
+          zombieCandidate.x,
+          zombieModel.position.y,
+          zombieCandidate.z
+        );
+        updateZombieFacing(
+          zombieToTable.x * pushOnlyStep,
+          zombieToTable.z * pushOnlyStep,
+          delta
+        );
+        return true;
+      }
+      return false;
+    }
 
       function getQuadrantForPosition(x, z) {
         if (x < 0 && z >= 0) {
@@ -559,28 +1330,149 @@
         }
       }
 
+      function startDeath() {
+        if (playerDead) {
+          return;
+        }
+        playerDead = true;
+        deathFadeAlpha = 0;
+        deathFlashHoldTimer = deathFlashHoldDuration;
+        fadeOverlay.style.opacity = "0";
+        deathFlash.style.opacity = "1";
+        deathMessage.style.opacity = "0";
+        endMessage.style.opacity = "0";
+        pickupMessage.style.opacity = "0";
+        doorPrompt.style.opacity = "0";
+        doorLocked.style.opacity = "0";
+        if (bgAudio) {
+          bgAudio.pause();
+          bgAudio.currentTime = 0;
+        }
+        if (gameOverAudio) {
+          gameOverAudio.currentTime = 0;
+          gameOverAudio.play().catch(() => {});
+        }
+        messageTimer = 0;
+        doorLockedTimer = 0;
+      }
+
+      function updateDeath(delta) {
+        if (!playerDead) {
+          return;
+        }
+        if (deathFlashHoldTimer > 0) {
+          deathFlashHoldTimer = Math.max(0, deathFlashHoldTimer - delta);
+          deathFlash.style.opacity = "1";
+          fadeOverlay.style.opacity = "1";
+          deathMessage.style.opacity = "0";
+          return;
+        }
+        deathFadeAlpha = Math.min(1, deathFadeAlpha + fadeSpeed * delta);
+        const alpha = deathFadeAlpha.toFixed(2);
+        fadeOverlay.style.opacity = "1";
+        deathMessage.style.opacity = alpha;
+        deathFlash.style.opacity = (1 - deathFadeAlpha).toFixed(2);
+      }
+
+      function checkZombieCollision() {
+        if (playerDead || gameComplete || !zombieModel) {
+          return;
+        }
+        const dx = player.position.x - zombieModel.position.x;
+        const dz = player.position.z - zombieModel.position.z;
+        const distance = Math.hypot(dx, dz);
+        if (distance <= playerHitboxRadius + zombieHurtboxRadius) {
+          startDeath();
+        }
+      }
+
+      function killZombies() {
+        if (zombieModel) {
+          scene.remove(zombieModel);
+          zombieModel = null;
+        }
+        if (zombieHitbox) {
+          scene.remove(zombieHitbox);
+          zombieHitbox = null;
+        }
+        if (zombieHurtbox) {
+          scene.remove(zombieHurtbox);
+          zombieHurtbox = null;
+        }
+        if (zombieTargetMarker) {
+          zombieTargetMarker.visible = false;
+        }
+        zombieMixer = null;
+        zombieAction = null;
+        zombieAvoidingTable = false;
+        zombieAvoidDirection = 0;
+        zombieStuckFrames = 0;
+        zombieFacingInitialized = false;
+      }
+
+      function setDebugAxisMode(enabled) {
+        debugAxisMode = enabled;
+        axisMarker.visible = debugAxisMode;
+        if (debugAxisMode) {
+          if (idleModel) {
+            idleModel.visible = false;
+          }
+          if (walkModel) {
+            walkModel.visible = false;
+          }
+          if (walkBackModel) {
+            walkBackModel.visible = false;
+          }
+        }
+      }
+
+      function updateAxisMarker() {
+        axisMarker.visible = debugAxisMode;
+        axisMarker.position.set(
+          player.position.x,
+          player.position.y,
+          player.position.z
+        );
+        axisMarker.rotation.set(0, 0, 0);
+        facingRod.rotation.y = player.rotation.y;
+      }
+
       function startCompletion() {
-        if (gameComplete) {
+        if (gameComplete || playerDead) {
           return;
         }
         gameComplete = true;
-        fadeAlpha = 0;
+        fadeAlpha = 1;
         fadeOverlay.style.opacity = "0";
-        endMessage.style.opacity = "0";
+        endMessage.style.opacity = "1";
+        if (bgAudio) {
+          bgAudio.pause();
+          bgAudio.currentTime = 0;
+        }
+        if (meowAudio) {
+          meowAudio.currentTime = 0;
+          meowAudio.play().catch(() => {});
+        }
       }
 
       function updateCompletion(delta) {
-        if (!gameComplete) {
+        if (!gameComplete || playerDead) {
           return;
         }
-        fadeAlpha = Math.min(1, fadeAlpha + fadeSpeed * delta);
-        const alpha = fadeAlpha.toFixed(2);
-        fadeOverlay.style.opacity = alpha;
-        endMessage.style.opacity = alpha;
+        fadeOverlay.style.opacity = "0";
+        endMessage.style.opacity = "1";
       }
 
       function updateDoorInteraction() {
         if (!doorObject) {
+          doorPrompt.style.opacity = "0";
+          doorLocked.style.opacity = "0";
+          doorLockedTimer = 0;
+          ePressed = false;
+          return;
+        }
+
+        if (playerDead) {
           doorPrompt.style.opacity = "0";
           doorLocked.style.opacity = "0";
           doorLockedTimer = 0;
@@ -620,11 +1512,12 @@
         }
 
         let move = 0;
+        const currentMoveSpeed = debugAxisMode ? moveSpeed * 0.25 : moveSpeed;
         if (keys.w) {
-          move += moveSpeed * delta;
+          move += currentMoveSpeed * delta;
         }
         if (keys.s) {
-          move -= moveSpeed * delta;
+          move -= currentMoveSpeed * delta;
         }
 
         if (move !== 0) {
@@ -635,11 +1528,19 @@
           const nextX = player.position.x + moveStep.x;
           const nextZ = player.position.z + moveStep.z;
 
-          if (isInsideHallway(nextX, nextZ)) {
+          if (isPositionAllowed(nextX, nextZ, playerHitboxRadius)) {
             player.position.set(nextX, player.position.y, nextZ);
           } else {
-            const canMoveX = isInsideHallway(nextX, player.position.z);
-            const canMoveZ = isInsideHallway(player.position.x, nextZ);
+            const canMoveX = isPositionAllowed(
+              nextX,
+              player.position.z,
+              playerHitboxRadius
+            );
+            const canMoveZ = isPositionAllowed(
+              player.position.x,
+              nextZ,
+              playerHitboxRadius
+            );
             if (canMoveX) {
               player.position.x = nextX;
             }
@@ -647,6 +1548,14 @@
               player.position.z = nextZ;
             }
           }
+        }
+
+        if (playerHitbox) {
+          playerHitbox.position.set(
+            player.position.x,
+            player.position.y + playerHitboxYOffset,
+            player.position.z
+          );
         }
       }
 
@@ -729,22 +1638,270 @@
       }
 
       function updateWalkAnimation(delta) {
-        const walkingNow = keys.w && !keys.s && !gameComplete;
-        const useWalkModel = walkingNow && Boolean(walkModel);
+        if (debugAxisMode) {
+          if (idleModel) {
+            idleModel.visible = false;
+          }
+          if (walkModel) {
+            walkModel.visible = false;
+          }
+          if (walkBackModel) {
+            walkBackModel.visible = false;
+          }
+          if (walkAction) {
+            walkAction.timeScale = 0;
+          }
+          if (walkBackAction) {
+            walkBackAction.timeScale = 0;
+          }
+          if (walkMixer) {
+            walkMixer.update(delta);
+          }
+          if (walkBackMixer) {
+            walkBackMixer.update(delta);
+          }
+          return;
+        }
+        const walkingForward =
+          keys.w && !keys.s && !gameComplete && !playerDead;
+        const walkingBackward =
+          keys.s && !keys.w && !gameComplete && !playerDead;
+        const useWalkModel = walkingForward && Boolean(walkModel);
+        const useWalkBackModel = walkingBackward && Boolean(walkBackModel);
         if (walkModel) {
           walkModel.visible = useWalkModel;
         }
-        if (idleModel) {
-          idleModel.visible = !useWalkModel;
+        if (walkBackModel) {
+          walkBackModel.visible = useWalkBackModel;
         }
-        if (!walkMixer || !walkAction) {
+        if (idleModel) {
+          idleModel.visible = !(useWalkModel || useWalkBackModel);
+        }
+        if (idleMixer && idleAction) {
+          idleAction.timeScale = idleModel && idleModel.visible ? 1 : 0;
+          idleMixer.update(delta);
+        }
+        if (walkMixer && walkAction) {
+          walkAction.timeScale = useWalkModel ? 1 : 0;
+          walkMixer.update(delta);
+        }
+        if (walkBackMixer && walkBackAction) {
+          walkBackAction.timeScale = useWalkBackModel ? 1 : 0;
+          walkBackMixer.update(delta);
+        }
+      }
+
+      function updateZombieMovement(delta) {
+        if (!zombieModel) {
           return;
         }
-        walkAction.timeScale = useWalkModel ? 1 : 0;
-        walkMixer.update(delta);
+        const elapsedSeconds = (performance.now() - gameStartTime) / 1000;
+        const speedScale =
+          elapsedSeconds <= zombieSpeedRampStart
+            ? 1
+            : 1 + (elapsedSeconds - zombieSpeedRampStart) * zombieSpeedRampRate;
+        const currentZombieSpeed = zombieSpeed * speedScale;
+        zombieDirection.set(
+          player.position.x - zombieModel.position.x,
+          0,
+          player.position.z - zombieModel.position.z
+        );
+        const distance = zombieDirection.length();
+        if (distance < 0.01) {
+          return;
+        }
+        zombieDirection.multiplyScalar(1 / distance);
+        const step = currentZombieSpeed * delta;
+        const stepX = zombieDirection.x * step;
+        const stepZ = zombieDirection.z * step;
+        const nextX = zombieModel.position.x + stepX;
+        const nextZ = zombieModel.position.z + stepZ;
+        setZombieTarget(nextX, nextZ);
+        const directAllowed = isPositionAllowed(
+          nextX,
+          nextZ,
+          zombieHitboxRadius
+        );
+        const directBlockedByTable = isCollidingWithTable(
+          nextX,
+          nextZ,
+          zombieHitboxRadius
+        );
+        const touchingTable = isCollidingWithTable(
+          zombieModel.position.x,
+          zombieModel.position.z,
+          zombieHitboxRadius
+        );
+        const pathBlockedByTable = isTableBlockingPath(
+          zombieModel.position.x,
+          zombieModel.position.z,
+          player.position.x,
+          player.position.z,
+          zombieHitboxRadius
+        );
+        const shouldAvoid =
+          directBlockedByTable ||
+          touchingTable ||
+          (zombieAvoidingTable && pathBlockedByTable);
+
+        if (zombieAvoidingTable) {
+          if (!shouldAvoid && directAllowed) {
+            zombieAvoidingTable = false;
+            zombieAvoidDirection = 0;
+            zombieStuckFrames = 0;
+            logZombieEvent("table-avoid-end", {
+              position: {
+                x: zombieModel.position.x.toFixed(2),
+                z: zombieModel.position.z.toFixed(2),
+              },
+              flags: {
+                directAllowed,
+                directBlockedByTable,
+                pathBlockedByTable,
+                touchingTable,
+              },
+            });
+          }
+        } else if (shouldAvoid) {
+          if (selectZombieAvoidDirection(step)) {
+            zombieAvoidingTable = true;
+            zombieStuckFrames = 0;
+            logZombieEvent("table-avoid-start", {
+              position: {
+                x: zombieModel.position.x.toFixed(2),
+                z: zombieModel.position.z.toFixed(2),
+              },
+              target: {
+                x: player.position.x.toFixed(2),
+                z: player.position.z.toFixed(2),
+              },
+              direction: zombieAvoidDirection,
+              flags: {
+                directBlockedByTable,
+                pathBlockedByTable,
+                touchingTable,
+              },
+            });
+          } else {
+            logZombieEvent("table-avoid-failed", {
+              position: {
+                x: zombieModel.position.x.toFixed(2),
+                z: zombieModel.position.z.toFixed(2),
+              },
+              flags: {
+                directBlockedByTable,
+                pathBlockedByTable,
+                touchingTable,
+              },
+            });
+          }
+        }
+
+        let moved = false;
+        if (zombieAvoidingTable) {
+          moved = moveZombieAlongTable(step, delta);
+        }
+
+        if (!moved) {
+          if (directAllowed) {
+            setZombieTarget(nextX, nextZ);
+            zombieModel.position.set(nextX, zombieModel.position.y, nextZ);
+            updateZombieFacing(stepX, stepZ, delta);
+            moved = true;
+          } else {
+            const hasStepX = Math.abs(stepX) > 0.00001;
+            const hasStepZ = Math.abs(stepZ) > 0.00001;
+            const canMoveX =
+              hasStepX &&
+              isPositionAllowed(
+                nextX,
+                zombieModel.position.z,
+                zombieHitboxRadius
+              );
+            const canMoveZ =
+              hasStepZ &&
+              isPositionAllowed(
+                zombieModel.position.x,
+                nextZ,
+                zombieHitboxRadius
+              );
+            const moveX = canMoveX ? stepX : 0;
+            const moveZ = canMoveZ ? stepZ : 0;
+            if (canMoveX || canMoveZ) {
+              setZombieTarget(
+                zombieModel.position.x + moveX,
+                zombieModel.position.z + moveZ
+              );
+            }
+            if (canMoveX) {
+              zombieModel.position.x = nextX;
+              moved = true;
+            }
+            if (canMoveZ) {
+              zombieModel.position.z = nextZ;
+              moved = true;
+            }
+            if (moved) {
+              updateZombieFacing(moveX, moveZ, delta);
+            }
+          }
+        }
+
+        if (zombieAvoidingTable && !moved) {
+          zombieStuckFrames += 1;
+          if (zombieStuckFrames === 20) {
+            logZombieEvent("table-avoid-stuck", {
+              position: {
+                x: zombieModel.position.x.toFixed(2),
+                z: zombieModel.position.z.toFixed(2),
+              },
+              target: {
+                x: player.position.x.toFixed(2),
+                z: player.position.z.toFixed(2),
+              },
+              direction: zombieAvoidDirection,
+              flags: {
+                directAllowed,
+                directBlockedByTable,
+                pathBlockedByTable,
+                touchingTable,
+              },
+            });
+            zombieStuckFrames = 0;
+          }
+        } else if (moved) {
+          zombieStuckFrames = 0;
+        }
+        if (zombieHitbox) {
+          zombieHitbox.position.set(
+            zombieModel.position.x,
+            zombieModel.position.y + zombieHitboxYOffset,
+            zombieModel.position.z
+          );
+        }
+        if (zombieHurtbox) {
+          zombieHurtbox.position.set(
+            zombieModel.position.x,
+            zombieModel.position.y + zombieHurtboxYOffset,
+            zombieModel.position.z
+          );
+        }
+        if (zombieAction) {
+          zombieAction.timeScale = 1.716 * speedScale;
+        }
+      }
+
+      function updateZombieAnimation(delta) {
+        if (!zombieMixer || !zombieAction) {
+          return;
+        }
+        zombieMixer.update(delta);
       }
 
       function updateDebugHud() {
+        if (!debugMode) {
+          return;
+        }
         const p = player.position;
         const c = camera.position;
         const pRot = player.rotation;
@@ -773,16 +1930,21 @@
 
       function render() {
         const delta = clock.getDelta();
-        if (!gameComplete) {
+        if (!gameComplete && !playerDead) {
           updatePlayer(delta);
+          updateZombieMovement(delta);
           checkKeyPickup();
+          checkZombieCollision();
           updateCameraByQuadrant();
           updateCamera(delta);
         }
         updateWalkAnimation(delta);
+        updateAxisMarker();
+        updateZombieAnimation(delta);
         updateDoorInteraction();
         updatePickupMessage(delta);
         updateDoorLockedMessage(delta);
+        updateDeath(delta);
         updateCompletion(delta);
         updateDebugHud();
         renderer.render(scene, camera);
