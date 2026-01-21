@@ -357,8 +357,9 @@
       const zombieHitboxRadius = 0.5;
       const zombieHitboxLength = 1;
       const zombieHitboxYOffset = zombieHitboxRadius + zombieHitboxLength / 2;
-      const zombieHurtboxRadius = zombieHitboxRadius * 2;
-      const zombieHurtboxLength = zombieHitboxLength * 2;
+      const zombieHurtboxScale = 1.44;
+      const zombieHurtboxRadius = zombieHitboxRadius * 2 * zombieHurtboxScale;
+      const zombieHurtboxLength = zombieHitboxLength * 2 * zombieHurtboxScale;
       const zombieHurtboxYOffset = zombieHurtboxRadius + zombieHurtboxLength / 2;
       const axisLength = 5;
       const axisThickness = 0.06;
@@ -370,6 +371,7 @@
       let ePressed = false;
       let gameComplete = false;
       let playerDead = false;
+      const enableDeveloperFeatures = false;                          //The One to Change before live
       let debugMode = false;
       let debugAxisMode = false;
       let zombieAvoidingTable = false;
@@ -395,6 +397,8 @@
       const messageFade = 2.5;
       let messageTimer = 0;
       let doorLockedTimer = 0;
+      const meowLoopInterval = 3;
+      let meowLoopTimer = 0;
       const doorPosition = new THREE.Vector3(-4.17, 0, 9.7);
       const doorPromptRadius = 2;
       const tablePosition = new THREE.Vector3(5, 0, 5);
@@ -529,7 +533,7 @@
           if (key === "e" && !event.repeat) {
             ePressed = true;
           }
-          if (key === "k" && !event.repeat) {
+          if (key === "k" && !event.repeat && enableDeveloperFeatures) {
             debugMode = !debugMode;
             originMarker.visible = debugMode;
             if (playerHitbox) {
@@ -553,7 +557,7 @@
               debugHud.textContent = "";
             }
           }
-          if (key === "l" && !event.repeat && debugMode) {
+          if (key === "l" && !event.repeat && debugMode && enableDeveloperFeatures) {
             killZombies();
             setDebugAxisMode(!debugAxisMode);
           }
@@ -1266,12 +1270,13 @@
 
       function updateCameraByQuadrant(force = false) {
         const cameraControlActive =
-          keys.k ||
-          keys.l ||
-          keys.arrowup ||
-          keys.arrowdown ||
-          keys.arrowleft ||
-          keys.arrowright;
+          enableDeveloperFeatures &&
+          (keys.k ||
+            keys.l ||
+            keys.arrowup ||
+            keys.arrowdown ||
+            keys.arrowleft ||
+            keys.arrowright);
         if (!force && cameraControlActive) {
           return;
         }
@@ -1453,6 +1458,7 @@
           meowAudio.currentTime = 0;
           meowAudio.play().catch(() => {});
         }
+        meowLoopTimer = 0;
       }
 
       function updateCompletion(delta) {
@@ -1461,6 +1467,14 @@
         }
         fadeOverlay.style.opacity = "0";
         endMessage.style.opacity = "1";
+        if (meowAudio) {
+          meowLoopTimer += delta;
+          if (meowLoopTimer >= meowLoopInterval) {
+            meowLoopTimer -= meowLoopInterval;
+            meowAudio.currentTime = 0;
+            meowAudio.play().catch(() => {});
+          }
+        }
       }
 
       function updateDoorInteraction() {
@@ -1560,6 +1574,9 @@
       }
 
       function updateCamera(delta) {
+        if (!enableDeveloperFeatures) {
+          return;
+        }
         if (keys.k) {
           let yaw = 0;
           let pitch = 0;
