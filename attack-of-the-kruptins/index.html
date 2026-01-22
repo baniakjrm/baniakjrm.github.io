@@ -1,0 +1,40 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="utf-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1" />
+  <title>Attack of The Kruptins</title>
+  <link rel="stylesheet" href="styles.css">
+</head>
+<body>
+  <!-- Control selection screen -->
+  <div id="control-selection">
+    <h1>Attack of The Kruptins</h1>
+    <div class="control-option" onclick="selectControls('desktop')">
+      <div style="font-size: 20px; margin-bottom: 8px;">Keyboard and Mouse</div>
+      <div style="font-size: 14px; color: #bbb;">Move: W/S, Strafe: A/D, Mouse: Look/aim, Reset: R, Upgrades: U</div>
+    </div>
+    <div class="control-option" onclick="selectControls('mobile')">
+      <div style="font-size: 20px; margin-bottom: 8px;">Touchscreen</div>
+      <div style="font-size: 14px; color: #bbb;">Joystick: Move/strafe, Right side: Drag to look, Tap to shoot</div>
+    </div>
+  </div>
+
+  <canvas id="canvas" width="960" height="600"></canvas>
+  <div id="hud"></div>
+  <div id="credits">0</div>
+  <div id="kills">0</div>
+  <div id="lives">1</div>
+  <div id="rooms">0</div>
+  <div id="debug">DEBUG GODMODE ENABLED</div>
+  <!-- Load JavaScript modules in dependency order -->
+  <script src="audio.js"></script>
+  <script src="persistence.js"></script>
+  <script src="world-generation.js"></script>
+  <script src="weapons.js"></script>
+  <script src="enemies.js"></script>
+  <script src="ui.js"></script>
+  <script src="controls.js"></script>
+  <script src="game-core.js"></script>
+</body>
+</html>
